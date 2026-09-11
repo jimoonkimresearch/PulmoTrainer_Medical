@@ -67,7 +67,7 @@ public class CandleUIManager : MonoBehaviour
                 scoreText.text = ("촛불 " + (10 * currStage) + "개 중에 " + candleOffed + "개를 껐어요!"
                 + "\n다음엔 더 많이 끌수 있을까요?");
                 scoreTr.gameObject.SetActive(true);
-                soundManager.SendMessage("ScoreBoardSound");
+                soundManager.ScoreBoardSound();
             }
             else if (candleOffed >= (10 * currStage))
             {
@@ -84,6 +84,9 @@ public class CandleUIManager : MonoBehaviour
 
     public void ResetScoreUI()
     {
+        StopAllCoroutines();
+        CancelInvoke();
+        if (perfectEffect != null) perfectEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         scoreTr.gameObject.SetActive(false);
     }
 
@@ -128,6 +131,8 @@ public class CandleUIManager : MonoBehaviour
 
     public void ResetUI()
     {
+        StopAllCoroutines();
+        CancelInvoke();
         for (int i = 0; i < currStage; i++)
         {
             Stars[i].SetActive(false);
@@ -181,4 +186,3 @@ public class CandleUIManager : MonoBehaviour
         showStarAnims[0] = obj.GetComponent<Animation>();
     }
 }
-

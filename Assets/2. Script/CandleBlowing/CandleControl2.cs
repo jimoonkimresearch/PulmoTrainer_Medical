@@ -1,111 +1,118 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class CandleControl2 : MonoBehaviour
 {
-    public Transform[] candleFires = null;
-    public CandleGameManager2 candleGameManager = null;
-    public GameObject uiManager = null;
+    [SerializeField] private Transform[] candleFires;
+    [SerializeField] private CandleGameManager2 candleGameManager;
+    [SerializeField] private GameObject uiManager;
+    [SerializeField] private float tiltRatio = 300f;
+    [SerializeField, HideInInspector] private float airPerOffcandle = 220f;
+    [SerializeField, Range(0f, 1f)] private float minimumEffectiveIntensity = 0f;
+    [SerializeField, Min(0.01f)] private float targetDose = 2f;
+    [SerializeField, Min(0.01f)] private float difficultyMultiplier = 1f;
+    private float accumulatedDose;
+    private int extinguishedCount;
+    private Collider[] selectionColliders;
+    private bool[] colliderEnabled;
+    private FireControl[] flames;
+    private Vector3[] initialScales;
+    private Quaternion[] initialRotations;
+    private Outline outline;
+    private bool initialized;
+    public bool IsCompleted { get; private set; }
+    public int ExtinguishedCount => extinguishedCount;
+    public int candlesForOff => extinguishedCount;
+    public float DoseProgress => Mathf.Clamp01(accumulatedDose / RequiredDose);
+    private float RequiredDose => Mathf.Max(0.01f, targetDose) * Mathf.Max(0.01f, difficultyMultiplier);
 
-    private int candleCount = 10;
-    private int offNum = 1;
-    public int candlesForOff = 0;
-
-    private float intakedAir = 0f;
-    private float outtakedAir = 0f;
-    private float outtakeTime = 0f;
-    private float totalAir = 0f;
-    private float sensorPlus = 0f;
-    private float sensorMinus = 0f;
-
-    public float tiltRatio = 300f;
-    public float airPerOffcandle = 220f;
-
-    // Start is called before the first frame update
-    void Start()
+    private void Awake() { EnsureInitialized(); }
+    private void EnsureInitialized()
     {
-        
+        if (initialized) return;
+        if (candleFires == null) candleFires = new Transform[0];
+        flames = new FireControl[candleFires.Length];
+        initialScales = new Vector3[candleFires.Length];
+        initialRotations = new Quaternion[candleFires.Length];
+        for (int i = 0; i < candleFires.Length; i++)
+        {
+            if (candleFires[i] == null) continue;
+            flames[i] = candleFires[i].GetComponent<FireControl>();
+            initialScales[i] = candleFires[i].localScale;
+            initialRotations[i] = candleFires[i].localRotation;
+        }
+        selectionColliders = GetComponentsInChildren<Collider>(true);
+        colliderEnabled = new bool[selectionColliders.Length];
+        for (int i = 0; i < selectionColliders.Length; i++) colliderEnabled[i] = selectionColliders[i].enabled;
+        outline = GetComponent<Outline>();
+        initialized = true;
     }
 
-    // Update is called once per frame
-    void Update()
+    public void Intake(float pressure)
     {
-        
+        EnsureInitialized();
+        if (IsCompleted || pressure >= 0f || GameManager.instance == null) return;
+        TiltFire(pressure, GameManager.instance.maxInhalePressure);
     }
 
-    public void Intake(float sensorData)
+    public void ProcessExhale(float pressure, float deltaTime)
     {
-        if (sensorData > 0f)
+        EnsureInitialized();
+        if (IsCompleted || !isActiveAndEnabled || GameManager.instance == null ||
+            deltaTime <= 0f || float.IsNaN(pressure) || float.IsInfinity(pressure)) return;
+        float calibration = GameManager.instance.maxExhalePressure;
+        if (calibration <= 0f) return;
+        float intensity = Mathf.Clamp01(Mathf.Max(0f, pressure) / calibration);
+        if (intensity < Mathf.Clamp01(minimumEffectiveIntensity)) return;
+        accumulatedDose = Mathf.Min(RequiredDose, accumulatedDose + intensity * deltaTime);
+        TiltFire(pressure, calibration);
+        int targetCount = Mathf.Min(candleFires.Length,
+            Mathf.FloorToInt(DoseProgress * candleFires.Length + 0.00001f));
+        while (extinguishedCount < targetCount)
         {
-            sensorMinus = (sensorData * -1f);
-
+            int index = extinguishedCount++;
+            if (flames[index] != null) flames[index].ShrinkAndOff();
+            else if (candleFires[index] != null) candleFires[index].gameObject.SetActive(false);
         }
-        else
-        {
-            sensorMinus = sensorData;
-        }
-        intakedAir += sensorMinus;
-        
-        TiltFire(sensorMinus);
+        if (candleFires.Length > 0 && extinguishedCount == candleFires.Length) CompleteInteraction();
     }
 
-    private void TiltFire(float sensorData)
+    private void TiltFire(float pressure, float reference)
     {
-        float fireTiltAngle = (sensorData / GameManager.instance.maxInhalePressure) * tiltRatio;
-        for (int i = 0; i < candleCount; i++)
-        {
-            candleFires[i].rotation = Quaternion.Euler(new Vector3(fireTiltAngle * -1f, 0f, 0f));
-        }
+        if (Mathf.Abs(reference) <= 0.00001f) return;
+        float angle = Mathf.Clamp(pressure / reference, -1f, 1f) * -tiltRatio;
+        for (int i = extinguishedCount; i < candleFires.Length; i++)
+            if (candleFires[i] != null)
+                candleFires[i].localRotation = initialRotations[i] * Quaternion.Euler(angle, 0f, 0f);
     }
 
-    private void turningOffFire(float sensorData)
+    public void CompleteInteraction()
     {
-        //if (sensorData < GameManager.instance.sensorActionPotential && outtakeTime>1f)
-        //{
-        //    uiManager.SendMessage("ScoreUI", totalAir);
-        //    candleGameManager.currState = CandleGameManager2.GameState.FINISH;
-        //}
-        if (sensorData < 0f)
-        {
-            sensorPlus = (sensorData * -1f);
-
-        }
-        else
-        {
-            sensorPlus = sensorData;
-        }
-        outtakeTime += Time.deltaTime;
-        TiltFire(sensorPlus);
-        outtakedAir += sensorPlus;
-        totalAir = (1f + (intakedAir / GameManager.instance.maxIntake)) * outtakedAir;
-        candlesForOff = (int)(totalAir / airPerOffcandle) ;
-        //Debug.Log(candlesForOff);
-        //offNum은 이번에 끌 차례인 촛불, candlesForOff는 호흡입력 결과 꺼야하는 촛불 수
-        if (offNum <= candlesForOff && offNum < 11)
-        {
-            candleFires[offNum - 1].SendMessage("ShrinkAndOff");
-            uiManager.GetComponent<CandleUIManager>().GetOffCandleStar(offNum);
-            offNum++;
-            candleGameManager.candleOffedOnThisStage++;
-        }
+        EnsureInitialized();
+        if (IsCompleted) return;
+        IsCompleted = true;
+        if (outline != null) outline.enabled = false;
+        foreach (Collider collider in selectionColliders) if (collider != null) collider.enabled = false;
     }
 
-    public void ResetCandles()
+    public void ResetInteraction()
     {
-        for(int i = 0; i < candleCount; i++)
+        EnsureInitialized();
+        StopAllCoroutines();
+        CancelInvoke();
+        accumulatedDose = 0f;
+        extinguishedCount = 0;
+        IsCompleted = false;
+        if (outline != null) outline.enabled = false;
+        for (int i = 0; i < selectionColliders.Length; i++)
+            if (selectionColliders[i] != null) selectionColliders[i].enabled = colliderEnabled[i];
+        for (int i = 0; i < candleFires.Length; i++)
         {
+            if (candleFires[i] == null) continue;
+            if (flames[i] != null) flames[i].ResetFlame();
+            candleFires[i].localScale = initialScales[i];
+            candleFires[i].localRotation = initialRotations[i];
             candleFires[i].gameObject.SetActive(true);
-            candleFires[i].localScale = Vector3.one * 0.05f;
-            candleFires[i].rotation = Quaternion.Euler(Vector3.zero);
         }
-        intakedAir = 0f;
-        outtakedAir = 0f;
-        totalAir = 0f;
-        offNum = 1;
-        outtakeTime = 0f;
-        sensorPlus = 0f;
-        sensorMinus = 0f;
-        candlesForOff = 0;
     }
+    public void ResetCandles() { ResetInteraction(); }
 }

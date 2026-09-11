@@ -23,9 +23,7 @@ public sealed class CandleSelectStickCtrl : PulmoGazeHandler
             if (Manager == null) return false;
             var state = Manager.currState;
             return state == CandleGameManager2.GameState.SEEKINGCANDLE ||
-                state == CandleGameManager2.GameState.INHALEREADY ||
-                state == CandleGameManager2.GameState.INHALE ||
-                state == CandleGameManager2.GameState.EXHALE;
+                state == CandleGameManager2.GameState.INHALEREADY;
         }
     }
 
@@ -37,7 +35,10 @@ public sealed class CandleSelectStickCtrl : PulmoGazeHandler
         {
             if (candle != null && candle.activeInHierarchy &&
                 (hitCollider.gameObject == candle || hitCollider.transform.IsChildOf(candle.transform)))
-                return candle;
+            {
+                CandleControl2 interaction = candle.GetComponent<CandleControl2>();
+                if (interaction != null && interaction.isActiveAndEnabled && !interaction.IsCompleted) return candle;
+            }
         }
         return null;
     }
@@ -45,6 +46,8 @@ public sealed class CandleSelectStickCtrl : PulmoGazeHandler
     public override void EnterTarget(GameObject target)
     {
         if (!CanTrack || target == null) return;
+        CandleControl2 interaction = target.GetComponent<CandleControl2>();
+        if (interaction == null || interaction.IsCompleted) return;
         int index = System.Array.IndexOf(Manager.candleControl, target);
         if (index < 0) return;
         Manager.currCandleSeeing = index;
