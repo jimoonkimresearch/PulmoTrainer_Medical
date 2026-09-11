@@ -12747,7 +12747,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &1351736862
 Canvas:
   m_ObjectHideFlags: 0
@@ -17446,7 +17446,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: e568aea00b992224b934d7555c41ec04, type: 3}
+  m_Resource: {fileID: 8300000, guid: 8ac19c67024d343a2bd3d6f5f1eefb32, type: 3}
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1

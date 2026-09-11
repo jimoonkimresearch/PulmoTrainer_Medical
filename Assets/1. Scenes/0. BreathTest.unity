@@ -5833,7 +5833,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37d357eea1852b545ab624b4ff0ce4d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  isSimulatingOnEditor: 1
+  isSimulatingOnEditor: 0
   bluetoothManagerObject: {fileID: 0}
   targetGameManager: {fileID: 0}
   exhaleKey: 273
@@ -10195,10 +10195,6 @@ MonoBehaviour:
   timeOut: 110
   sensorText: {fileID: 369193661}
   vrSensorText: {fileID: 0}
-  targetDeviceName: Breat
-  targetDeviceAddress: 
-  retryDelaySeconds: 3
-  connectionTimeoutSeconds: 15
   checkingBLE: 1
   logging: {fileID: 684045910}
   currGameManager: {fileID: 1440656213}
