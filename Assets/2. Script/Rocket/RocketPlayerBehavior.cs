@@ -17,6 +17,28 @@ public class RocketPlayerBehavior : MonoBehaviour
     public float camMoveSpd = 1f;
     public bool finished = false;
 
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
+    private MenuCtrl menu;
+    private bool initialized;
+    private void Awake() { EnsureInitialized(); }
+    private void EnsureInitialized()
+    {
+        if (initialized) return;
+        playerTr = transform;
+        initialPosition = playerTr.position;
+        initialRotation = playerTr.rotation;
+        menu = menuButtons != null ? menuButtons.GetComponent<MenuCtrl>() : null;
+        initialized = true;
+    }
+    public void ResetFollowing()
+    {
+        EnsureInitialized();
+        StopAllCoroutines();
+        CancelInvoke();
+        playerTr.SetPositionAndRotation(initialPosition, initialRotation);
+        finished = false;
+    }
     private void Start()
     {
         playerTr = this.gameObject.GetComponent<Transform>();
@@ -33,7 +55,7 @@ public class RocketPlayerBehavior : MonoBehaviour
         if (!finished)
         {
             FollowRocket();
-            menuButtons.SendMessage("FollowPlayer");
+            if (menu != null) menu.FollowPlayer();
         }
     }
 

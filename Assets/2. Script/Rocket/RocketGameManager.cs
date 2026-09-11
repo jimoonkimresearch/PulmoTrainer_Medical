@@ -17,6 +17,11 @@ public class RocketGameManager : MonoBehaviour
     public float prevSensorData = 0;
 
     private Scene currScene;
+    private RocketBehavior2 rocket;
+    private RocketUIManager rocketView;
+    private Logging pressureLog;
+    private bool transitionInProgress;
+    private bool nextGameRequested;
 
     [SerializeField] private bool isGuiding = false;
     [SerializeField] private bool inhaleReady = false;
@@ -79,7 +84,7 @@ public class RocketGameManager : MonoBehaviour
 
         }
         //Debug.Log("currstage: " + currStage);
-        rocketUIManager.SendMessage("SetStage", currStage);
+        rocketView.SetStage(currStage);
     }
 
     private void Start()
@@ -89,6 +94,16 @@ public class RocketGameManager : MonoBehaviour
         loggingManager = GameObject.Find("LoggingManager");
         rocketUIManager = GameObject.Find("UIManager");
 
+        rocket = rocketControl != null ? rocketControl.GetComponent<RocketBehavior2>() : null;
+        rocketView = rocketUIManager != null ? rocketUIManager.GetComponent<RocketUIManager>() : null;
+        pressureLog = loggingManager != null ? loggingManager.GetComponent<Logging>() : null;
+        if (rocket == null || rocketView == null || gameManager == null || vrUiManager == null)
+        {
+            Debug.LogError("Rocket requires RocketBehavior2, RocketUIManager, GameManager and VRUIManager.", this);
+            return;
+        }
+        rocket.ConfigureStage(500f + currStage * 100f);
+        rocketView.SetStage(currStage);
         StartCoroutine(CheckState());
         //SceneManager.sceneLoaded += OnSceneLoaded;
         
@@ -121,9 +136,9 @@ public class RocketGameManager : MonoBehaviour
                     if (!isGuiding)
                     {
                         isGuiding = true;
-                        vrUiManager.GetComponent<VRUIManager>().ShowGuide(currStage);
+                        vrUiManager.ShowGuide(currStage);
                         vrUiManager.SetHeightProgress(0.0f);
-                        rocketUIManager.SendMessage("ResetUI");
+                        rocketView.ResetUI();
                     }
 
                     /*if ((Input.touchCount > 0) || PulmoInput.PointerReleased)
@@ -132,12 +147,12 @@ public class RocketGameManager : MonoBehaviour
                         {
                             if (guideCount == 4)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().HideRocketStartGuide(guideCount);
+                                vrUiManager.HideRocketStartGuide(guideCount);
                                 currState = RocketState.INHALEREADY;
                             }
                             else if (guideCount >= 0 && guideCount < 4)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().ShowRocketStartGuide(guideCount);
+                                vrUiManager.ShowRocketStartGuide(guideCount);
                                 guideCount++;
                                 yield return new WaitForSeconds(1f);
                             }
@@ -151,21 +166,21 @@ public class RocketGameManager : MonoBehaviour
                     }*/
 
                     //터치 없이 가이드 넘어가는 버전
-                    guideTime += Time.fixedDeltaTime;
+                    guideTime += Time.deltaTime;
                     if (guideTime >= guideTerm || PulmoInput.PointerReleased)
                     {
                         if (currStage == 1)
                         {
                             if (guideCount >= 4)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().HideRocketStartGuide(4);
+                                vrUiManager.HideRocketStartGuide(4);
                                 guideTime = 0f;
                                 currState = RocketState.INHALEREADY;
                             }
                             else if (guideCount >= 0 && guideCount < 4)
                             {
                                 Debug.Log(guideCount);
-                                vrUiManager.GetComponent<VRUIManager>().ShowRocketStartGuide(guideCount);
+                                vrUiManager.ShowRocketStartGuide(guideCount);
                                 guideCount++;
                                 guideTime = 0f;
                                 yield return new WaitForSeconds(1f);
@@ -191,7 +206,7 @@ public class RocketGameManager : MonoBehaviour
                         vrUiManager.maxRocketHeight = 500 + (currStage * 100);
                     }
                     selectionStick.SetActive(true);
-                    clearTime += Time.fixedDeltaTime;
+                    clearTime += Time.deltaTime;
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
 
                     if (sensorData <= gameManager.sensorActionPotential * -1f && (sensorData - prevSensorData) <= -2f)
@@ -207,17 +222,17 @@ public class RocketGameManager : MonoBehaviour
                         launchReady = true;
                         if (currStage == 1)
                         {
-                            rocketControl.SendMessage("ReadyForLaunch");
+                            rocket.ReadyForLaunch();
                         }
-                        loggingManager.SendMessage("logPressure", "Inhale Start");
+                        pressureLog?.logPressure("Inhale Start");
                     }
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
-                    loggingManager.SendMessage("logPressure", sensorData.ToString());
-                    clearTime += Time.fixedDeltaTime;
-                    intakeTime += Time.fixedDeltaTime;
+                    pressureLog?.logPressure(sensorData.ToString());
+                    clearTime += Time.deltaTime;
+                    intakeTime += Time.deltaTime;
 
-                    vrUiManager.SendMessage("inHaleFill", sensorData);
-                    rocketControl.SendMessage("Intake", sensorData);
+                    vrUiManager.inHaleFill(sensorData);
+                    rocket.Intake(sensorData);
 
                     if (sensorData > gameManager.sensorActionPotential && (sensorData - prevSensorData) >= 2f)
                     {
@@ -233,31 +248,19 @@ public class RocketGameManager : MonoBehaviour
                     if (!isRocketFlying)
                     {
                         isRocketFlying = true;
-                        rocketControl.SendMessage("startLaunching");
+                        rocket.startLaunching();
                         soundManager.StopMusic();
-                        soundManager.SendMessage("OnLaunchSound");
-                        loggingManager.SendMessage("logPressure", "Exhale Start");
+                        soundManager.OnLaunchSound();
+                        pressureLog?.logPressure("Exhale Start");
                     }
                     vrUiManager.exHaleFill(sensorData);
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
-                    loggingManager.GetComponent<Logging>().logPressure(sensorData.ToString());
-                    clearTime += Time.fixedDeltaTime;
-                    outtakeTime += Time.fixedDeltaTime;
-                    vrUiManager.SetHeightProgress(rocketControl.GetComponent<Transform>().position.y);
+                    pressureLog?.logPressure(sensorData.ToString());
+                    clearTime += Time.deltaTime;
+                    outtakeTime += Time.deltaTime;
+                    vrUiManager.SetHeightProgress(rocket.Height);
 
-                    if (outtakeTime >= 1f && sensorData > gameManager.sensorActionPotential)
-                    {
-                        rocketControl.SendMessage("FvcOuttake", sensorData);
-                        //vrUiManager.HideExhaleHud();
-                        //vrUiManager.HideInhaleHud();
-                    }
-                    else if (outtakeTime < 1f)
-                    {
-                        rocketControl.SendMessage("Fev1Outtake", sensorData);
-                    }
-
-
-
+                    rocket.ProcessExhale(sensorData, Time.deltaTime);
 
                     break;
 
@@ -267,8 +270,8 @@ public class RocketGameManager : MonoBehaviour
                     {
                         vrUiManager.HideExhaleHud();
                         vrUiManager.HideInhaleHud();
-                        soundManager.SendMessage("ScoreBoardSound");
-                        loggingManager.SendMessage("logClearTime", clearTime.ToString());
+                        soundManager.ScoreBoardSound();
+                        pressureLog?.logClearTime(clearTime.ToString());
                         //vrUiManager.SendMessage("ShowInhaleHud");
                         
                         isFinishScreen = true;
@@ -280,7 +283,11 @@ public class RocketGameManager : MonoBehaviour
                         if (currStage == 5)
                         {
                             //Application.Quit();
-                            GameManager.instance.SimulNextScene();
+                            if (!nextGameRequested)
+                            {
+                                nextGameRequested = true;
+                                gameManager.SimulNextScene();
+                            }
                         }
                         else
                         {
@@ -290,7 +297,7 @@ public class RocketGameManager : MonoBehaviour
                         }
 
                     }
-                    currStateTime += Time.fixedDeltaTime;
+                    currStateTime += Time.deltaTime;
                     break;
 
             }
@@ -306,12 +313,12 @@ public class RocketGameManager : MonoBehaviour
     void InhaleFinished()
     {
         currState = RocketState.EXHALE;
-        rocketControl.SendMessage("startLaunching");
+        rocket.startLaunching();
     }
 
     public void SensorStart()
     {
-        rocketControl.SendMessage("InHaleStart");
+        rocket.InHaleStart();
     }
 
     public void toFinishState()
@@ -322,75 +329,68 @@ public class RocketGameManager : MonoBehaviour
 
     public void toNextStage()
     {
+        if (transitionInProgress) return;
+        transitionInProgress = true;
         switch (currStage)
         {
             case 1:
                 SceneManager.LoadScene("1-2. RocketStage2", LoadSceneMode.Single);
-                break;
+                return;
             case 2:
                 SceneManager.LoadScene("1-345. RocketStage345", LoadSceneMode.Single);
-                break;
+                return;
             case 3:
                 currStage = 4;
                 setStage4();
-                currState = RocketState.GUIDE;
                 break;
             case 4:
                 currStage = 5;
                 setStage5();
-                currState = RocketState.GUIDE;
                 break;
         }
+        transitionInProgress = false;
     }
-
-        
-    
 
     private void resetStage()
     {
-        rocketControl.gameObject.SetActive(true);
-        rocketControl.SendMessage("ResetRocket");
-        rocketUIManager.SendMessage("ResetScoreUI");
-    }
-
-    void setStage4()
-    {
-        vrUiManager.BlockEye();                            
-        rocketUIManager.SendMessage("ResetUI");
-        stage3Planet.gameObject.SetActive(false);
-        stage4Planet.gameObject.SetActive(true);
-        rocketControl.SendMessage("ResetRocket");
+        outtakeTime = intakeTime = clearTime = guideTime = currStateTime = 0f;
+        sensorData = prevSensorData = 0f;
+        isGuiding = inhaleReady = launchReady = isRocketFlying = isFinishScreen = false;
+        nextGameRequested = false;
+        guideCount = 1;
+        vrUiManager.HideAllRocketGuides();
+        rocket.ConfigureStage(500f + currStage * 100f);
+        rocket.ResetRocket(); // The only rocket reset for a Stage 3->4 or 4->5 transition.
+        rocketView.ResetScoreUI();
+        rocketView.ResetUI();
+        rocketView.SetStage(currStage);
         vrUiManager.resetFill();
         vrUiManager.ResetOutFill();
-        resetStage();
-        isGuiding = false;
-        inhaleReady = false;
-        launchReady = false;
-        isRocketFlying = false;
-        isFinishScreen = false;
-        rocketUIManager.SendMessage("SetStage", currStage);
-        rayCastCam.GetComponent<CamRayCast>().messageSended = false;
-        soundManager.GetComponent<RocketSoundManager>().PlayMusic();
-        vrUiManager.UnBlockEye();                          
+        vrUiManager.maxRocketHeight = 500f + currStage * 100f;
+        vrUiManager.SetHeightProgress(0f);
+        vrUiManager.HideInhaleHud();
+        vrUiManager.HideExhaleHud();
+        if (selectionStick != null) selectionStick.SetActive(false);
+        if (rayCastCam != null) rayCastCam.GetComponent<CamRayCast>().messageSended = false;
+        if (soundManager != null) soundManager.PlayMusic();
+        currState = RocketState.GUIDE;
     }
 
-    void setStage5()
+    private void setStage4()
     {
         vrUiManager.BlockEye();
-        rocketUIManager.SendMessage("ResetUI");
-        stage4Planet.gameObject.SetActive(false);
-        stage5Planet.gameObject.SetActive(true);
-        rocketControl.SendMessage("ResetRocket");
-        vrUiManager.resetFill();
-        vrUiManager.ResetOutFill();
+        if (stage3Planet != null) stage3Planet.SetActive(false);
+        if (stage4Planet != null) stage4Planet.SetActive(true);
         resetStage();
-        isGuiding = false;
-        inhaleReady = false;
-        launchReady = false;
-        isRocketFlying = false;
-        isFinishScreen = false;
-        rocketUIManager.SendMessage("SetStage", currStage);
-        soundManager.GetComponent<RocketSoundManager>().PlayMusic();
+        vrUiManager.UnBlockEye();
+    }
+
+    private void setStage5()
+    {
+        vrUiManager.BlockEye();
+        if (stage4Planet != null) stage4Planet.SetActive(false);
+        if (stage5Planet != null) stage5Planet.SetActive(true);
+        resetStage();
         vrUiManager.UnBlockEye();
     }
 

@@ -297,6 +297,14 @@ public class VRUIManager : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
     }
 
+    public void HideAllRocketGuides()
+    {
+        if (rocketStartGuidePanels != null)
+            foreach (GameObject panel in rocketStartGuidePanels) if (panel != null) panel.SetActive(false);
+        if (rocketGuidePanels != null)
+            foreach (GameObject panel in rocketGuidePanels) if (panel != null) panel.SetActive(false);
+    }
+
     public void ShowRocketStartGuide(int guideNum)
     {
         if(guideNum > 0)
