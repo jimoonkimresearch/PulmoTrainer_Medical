@@ -29,6 +29,12 @@ public class BluetoothManager : MonoBehaviour
     private bool shuttingDown;
     private bool receivedPressure;
     private bool wasConnected;
+    [SerializeField, Min(0.25f)] private float reconnectDelaySeconds = 3f;
+    private bool scanPending;
+    private bool connectionPending;
+    private bool subscriptionStarted;
+    private Coroutine retryCoroutine;
+    private float nextConnectionCheck;
     public string ConnectionStatus { get; private set; } = "권한 확인 중";
 
     private bool checkSerial = false;
@@ -172,7 +178,9 @@ public class BluetoothManager : MonoBehaviour
     {
         BindStatusView(SceneManager.GetActiveScene());
         logging = GameObject.Find("LoggingManager");
+        Debug.Log("[PulmoBLE] Checking permissions.", this);
         yield return permissions.RequestAccess();
+        Debug.Log("[PulmoBLE] Permissions granted: " + permissions.IsGranted, this);
         if (!permissions.IsGranted)
         {
             SetStatus("권한 허용 필요");
@@ -207,7 +215,7 @@ public class BluetoothManager : MonoBehaviour
         catch (Exception ex)
         {
             SetStatus("블루투스 초기화 실패");
-            Debug.LogException(ex, this);
+            Debug.LogError("[PulmoBLE] " + ex, this);
         }
     }
 
@@ -227,56 +235,103 @@ public class BluetoothManager : MonoBehaviour
 
     private void StartDeviceScan()
     {
-        if (shuttingDown || bluetoothHelperInstance == null) return;
+        if (shuttingDown || bluetoothHelperInstance == null || scanPending || connectionPending || wasConnected) return;
         SetStatus("센서 검색 중");
-        bool started = bluetoothHelperInstance.ScanNearbyDevices();
-        Debug.Log("[PulmoBLE] Scan started: " + started, this);
-        if (!started) SetStatus("검색 시작 실패 · 권한/블루투스/위치 확인");
+        scanPending = true;
+        try
+        {
+            bool started = bluetoothHelperInstance.ScanNearbyDevices();
+            if (!started) scanPending = false;
+            Debug.Log("[PulmoBLE] Scan started: " + started, this);
+            if (!started) SetStatus("검색 시작 실패 · 권한/블루투스/위치 확인");
+        }
+        catch (Exception ex)
+        {
+            scanPending = false;
+            Debug.LogError("[PulmoBLE] Scan failed: " + ex, this);
+            QueueRetry(true);
+        }
     }
 
     private void OnScanEnded(BluetoothHelper helper, LinkedList<BluetoothDevice> devices)
     {
-        if (shuttingDown) return;
-        Debug.Log("[PulmoBLE] Found " + (devices == null ? 0 : devices.Count), this);
+        if (shuttingDown || helper != bluetoothHelperInstance || !scanPending) return;
+        scanPending = false;
+        Debug.Log("[PulmoBLE] Scan result count: " + (devices == null ? 0 : devices.Count), this);
         if (devices == null || devices.Count == 0)
         {
-            StartDeviceScan();
+            QueueRetry(true);
             return;
         }
 
-        foreach (BluetoothDevice device in devices)
-            Debug.Log("[PulmoBLE] Found name='" + device.DeviceName + "' address=" + device.DeviceAddress, this);
-
         try
         {
-            // Restore the original name-based lookup performed by the plugin.
-            // Addresses are logged only; do not override the device name with an address.
+            // Preserve the working name lookup; do not replace it with a MAC address.
             bluetoothHelperInstance.setDeviceName("Breat");
-            receivedPressure = false;
-            SetStatus("센서 연결 중");
-            bluetoothHelperInstance.Connect();
+            BeginConnection();
         }
         catch (Exception ex)
         {
-            Debug.LogException(ex, this);
-            StartDeviceScan();
+            Debug.LogError("[PulmoBLE] Device lookup failed: " + ex, this);
+            QueueRetry(true);
+        }
+    }
+
+    private void BeginConnection()
+    {
+        if (shuttingDown || bluetoothHelperInstance == null || connectionPending || wasConnected) return;
+        connectionPending = true;
+        receivedPressure = false;
+        SetStatus("센서 연결 중");
+        Debug.Log("[PulmoBLE] Connecting to Breat.", this);
+        try { bluetoothHelperInstance.Connect(); }
+        catch (Exception ex)
+        {
+            connectionPending = false;
+            Debug.LogError("[PulmoBLE] Connect failed: " + ex, this);
+            QueueRetry(true);
         }
     }
 
     private void OnConnectionFailed(BluetoothHelper helper)
     {
-        if (shuttingDown) return;
+        if (shuttingDown || helper != bluetoothHelperInstance || (!connectionPending && !wasConnected)) return;
+        connectionPending = false;
+        wasConnected = false;
+        subscriptionStarted = false;
         pressure = 0f;
         receivedPressure = false;
-        wasConnected = false;
-        SetStatus("연결 실패 · 다시 연결 중");
-        // Preserve the original retry on the same helper/name, without Disconnect + scan.
-        helper.Connect();
+        Debug.LogWarning("[PulmoBLE] Connection failed.", this);
+        QueueRetry(false);
+    }
+
+    private void QueueRetry(bool scanAgain)
+    {
+        if (shuttingDown || retryCoroutine != null) return;
+        SetStatus(scanAgain ? "재검색 대기" : "재연결 대기");
+        retryCoroutine = StartCoroutine(RetryAfterDelay(scanAgain));
+    }
+
+    private IEnumerator RetryAfterDelay(bool scanAgain)
+    {
+        // Yield before another native call: even a synchronous failure cannot recurse.
+        yield return new WaitForSecondsRealtime(Mathf.Max(0.25f, reconnectDelaySeconds));
+        while (!shuttingDown && bluetoothHelperInstance != null &&
+            (!permissions.HasRequiredAccess() || !bluetoothHelperInstance.IsBluetoothEnabled()))
+            yield return new WaitForSecondsRealtime(1f);
+        retryCoroutine = null;
+        if (shuttingDown || bluetoothHelperInstance == null || wasConnected) yield break;
+        Debug.Log("[PulmoBLE] Reconnect attempt: " + (scanAgain ? "scan then name lookup" : "existing Breat helper"), this);
+        if (scanAgain) StartDeviceScan();
+        else BeginConnection();
     }
 
     public void onConnected(BluetoothHelper helper)
     {
-        if (shuttingDown) return;
+        if (shuttingDown || helper != bluetoothHelperInstance || subscriptionStarted) return;
+        connectionPending = false;
+        scanPending = false;
+        subscriptionStarted = true;
         wasConnected = true;
         SetStatus("연결됨 · 데이터 대기");
         Debug.Log("[PulmoBLE] Connected name='" + helper.getDeviceName() +
@@ -289,18 +344,20 @@ public class BluetoothManager : MonoBehaviour
         try
         {
             helper.Subscribe(pressureService);
+            Debug.Log("[PulmoBLE] Subscribe succeeded: request submitted; waiting for notifications.", this);
         }
         catch (Exception ex)
         {
             SetStatus("연결됨 · 구독 오류");
             Debug.LogError("[PulmoBLE] Subscribe failed. Connection was not reset.", this);
-            Debug.LogException(ex, this);
+            Debug.LogError("[PulmoBLE] " + ex, this);
             return;
         }
 
         try
         {
             helper.StartListening();
+            Debug.Log("[PulmoBLE] StartListening succeeded.", this);
         }
         catch (Exception ex)
         {
@@ -308,7 +365,7 @@ public class BluetoothManager : MonoBehaviour
             // Keep any active notification subscription and report the actual failing stage.
             if (!receivedPressure) SetStatus("연결됨 · 수신 시작 오류");
             Debug.LogError("[PulmoBLE] StartListening failed after Subscribe returned. Connection was not reset.", this);
-            Debug.LogException(ex, this);
+            Debug.LogError("[PulmoBLE] " + ex, this);
         }
     }
 
@@ -343,13 +400,18 @@ public class BluetoothManager : MonoBehaviour
 
     private void Update()
     {
-        // Observe link loss for display only. Do not restart or disconnect a subscribed link.
-        if (shuttingDown || bluetoothHelperInstance == null || !wasConnected) return;
+        // Monitoring belongs to the connection service, independent of status-text visibility.
+        if (shuttingDown || bluetoothHelperInstance == null || !wasConnected ||
+            Time.realtimeSinceStartup < nextConnectionCheck) return;
+        nextConnectionCheck = Time.realtimeSinceStartup + 0.5f;
         if (bluetoothHelperInstance.isConnected()) return;
         wasConnected = false;
+        connectionPending = false;
+        subscriptionStarted = false;
         receivedPressure = false;
         pressure = 0f;
-        SetStatus("연결 끊김");
+        Debug.LogWarning("[PulmoBLE] Connection lost.", this);
+        QueueRetry(false);
     }
 
     private void SetStatus(string status)
@@ -390,6 +452,10 @@ public class BluetoothManager : MonoBehaviour
     {
         if (shuttingDown) return;
         shuttingDown = true;
+        if (retryCoroutine != null) StopCoroutine(retryCoroutine);
+        retryCoroutine = null;
+        scanPending = false;
+        connectionPending = false;
         pressure = 0f;
         SetStatus("블루투스 종료");
         if (bluetoothHelperInstance == null) return;
