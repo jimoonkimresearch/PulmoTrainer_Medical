@@ -6,8 +6,10 @@ using System.IO;
 using System;
 using UnityEngine.Serialization;
 using PulmoTrainer.Calibration;
+using PulmoTrainer.Training;
 
 
+[RequireComponent(typeof(TrainingEndSequence))]
 public class GameManager : MonoBehaviour
 {
     /*
@@ -55,6 +57,9 @@ public class GameManager : MonoBehaviour
     [SerializeField]
     private int currScenePlayed = 0;
 
+    private TrainingEndSequence trainingEndSequence;
+    private bool trainingEndRequested;
+
     private String[] sceneNames = { "1-1. RocketGame", "2. CandleBlowing", "3. Inhaler" };
 
     public int getStage { get; set; } = -1;
@@ -85,6 +90,7 @@ public class GameManager : MonoBehaviour
         {
             instance = this;
             DontDestroyOnLoad(this.gameObject);
+            EnsureTrainingEndSequence();
         }
         else if (instance != this)
         {
@@ -168,6 +174,7 @@ public class GameManager : MonoBehaviour
 
     public void SimulNextScene()
     {
+        if (trainingEndRequested) return;
         Debug.Log("SimulNextScene clicked");
         switch (loadSceneSeed%6)
         {
@@ -192,7 +199,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             case 1:
@@ -216,7 +223,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             case 2:
@@ -240,7 +247,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             case 3:
@@ -264,7 +271,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             case 4:
@@ -288,7 +295,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             case 5:
@@ -312,7 +319,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Application.Quit();
+                    CompleteTraining();
                 }
                 break;
             default:
@@ -320,6 +327,22 @@ public class GameManager : MonoBehaviour
 
         }
 
+    }
+
+    private void EnsureTrainingEndSequence()
+    {
+        if (trainingEndSequence != null) return;
+        trainingEndSequence = GetComponent<TrainingEndSequence>();
+        // Existing scene instances may predate RequireComponent.
+        if (trainingEndSequence == null) trainingEndSequence = gameObject.AddComponent<TrainingEndSequence>();
+    }
+
+    private void CompleteTraining()
+    {
+        if (trainingEndRequested) return;
+        trainingEndRequested = true;
+        EnsureTrainingEndSequence();
+        trainingEndSequence.Begin();
     }
 
     private void OnApplicationQuit()

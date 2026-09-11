@@ -38,7 +38,8 @@ namespace PulmoTrainer.Gaze
                 return;
             }
 
-            if (!handler.isActiveAndEnabled || !handler.CanTrack)
+            if (PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked ||
+                !handler.isActiveAndEnabled || !handler.CanTrack)
             {
                 HasHit = false;
                 ClearSelection();
@@ -160,7 +161,8 @@ namespace PulmoTrainer.Gaze
 
             ClearSelection();
             // Exit callbacks may change game state or disable this object.
-            if (!isActiveAndEnabled || candidate == null || !candidate.activeInHierarchy ||
+            if (PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked ||
+                !isActiveAndEnabled || candidate == null || !candidate.activeInHierarchy ||
                 handler == null || !handler.isActiveAndEnabled || !handler.CanTrack) return;
 
             currentTarget = candidate;
