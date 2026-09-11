@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.Android;
+using PulmoTrainer.Bluetooth;
 using UnityEngine.SceneManagement;
 using ArduinoBluetoothAPI;
 
@@ -245,30 +245,53 @@ public class BluetoothManager : MonoBehaviour
         
     }
 
-    // Start is called before the first frame update
-    void Start()
+    private IEnumerator Start()
+    {
+        logging = GameObject.Find("LoggingManager");
+        var permissions = new PulmoBluetoothPermissions();
+        yield return permissions.RequestAccess();
+        if (!permissions.IsGranted)
+        {
+            Debug.LogWarning("Bluetooth: foreground location and Bluetooth permissions are required. " +
+                "Grant them in Android app settings, then reopen the app.", this);
+            yield break;
+        }
+
+        InitializeBluetooth();
+    }
+
+    private void InitializeBluetooth()
     {
         BluetoothHelper.BLE = true;
         bluetoothHelperInstance = BluetoothHelper.GetInstance();
-
-        if (!bluetoothHelperInstance.IsBluetoothEnabled())
-            bluetoothHelperInstance.EnableBluetooth();
-
         SetBLEEvents();
 
-        //Device scan
-        Debug.Log("is scanning: " + bluetoothHelperInstance.ScanNearbyDevices());
-        //when scan not started
-        if (!bluetoothHelperInstance.ScanNearbyDevices())
+        if (!bluetoothHelperInstance.IsBluetoothEnabled())
         {
-
+            bluetoothHelperInstance.EnableBluetooth();
+            StartCoroutine(WaitForBluetoothAndScan());
+            return;
         }
-        Permission.RequestUserPermission(Permission.CoarseLocation);
-        //bluetoothHelperInstance.setDeviceName("BreatheInput");
-        //bluetoothHelperInstance.setDeviceAddress("09:40:40:8a:39:3a");
+        StartDeviceScan();
+    }
 
-        logging = GameObject.Find("LoggingManager");
-        //sceneLoaded();
+    private IEnumerator WaitForBluetoothAndScan()
+    {
+        // Enabling Bluetooth may show an asynchronous system dialog.
+        float deadline = Time.realtimeSinceStartup + 30f;
+        while (bluetoothHelperInstance != null &&
+            !bluetoothHelperInstance.IsBluetoothEnabled() && Time.realtimeSinceStartup < deadline)
+            yield return null;
+
+        if (bluetoothHelperInstance != null && bluetoothHelperInstance.IsBluetoothEnabled())
+            StartDeviceScan();
+        else
+            Debug.LogWarning("Bluetooth is off. Enable Bluetooth, then reopen the app.", this);
+    }
+
+    private void StartDeviceScan()
+    {
+        Debug.Log("is scanning: " + bluetoothHelperInstance.ScanNearbyDevices());
     }
 
     private void SetBLEEvents()
@@ -346,18 +369,15 @@ public class BluetoothManager : MonoBehaviour
 
     void chkBLE()
     {
+        GameObject stateObject = GameObject.Find("ArduinoState");
+        if (stateObject == null) return;
+        Text stateText = stateObject.GetComponent<Text>();
+        if (stateText == null) return;
 
-        if (bluetoothHelperInstance.isConnected())
-        {
-
-            GameObject.Find("ArduinoState").GetComponent<Text>().text = ("연결됨");
-            //GameObject.Find("ff").GetComponent<Text>().text = pressure.ToString();
-            //vrSensorText.text = "Device Name: " + bluetoothHelperInstance.getDeviceName();
-        }
-        else if (!bluetoothHelperInstance.isConnected())
-        {
-            GameObject.Find("ArduinoState").GetComponent<Text>().text = "검색중";
-        }
+        if (bluetoothHelperInstance == null)
+            stateText.text = "블루투스 준비 대기";
+        else
+            stateText.text = bluetoothHelperInstance.isConnected() ? "연결됨" : "검색중";
     }
 
     string[] dataToArray(string data)
@@ -399,9 +419,11 @@ public class BluetoothManager : MonoBehaviour
     public void QuitBLE()
     {
        
+        if (bluetoothHelperInstance == null) return;
         bluetoothHelperInstance.Disconnect();
         bluetoothHelperInstance.OnConnected -= onConnected;
     }
 
     
 }
+
