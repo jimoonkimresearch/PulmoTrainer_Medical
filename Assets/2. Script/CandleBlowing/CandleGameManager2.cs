@@ -18,6 +18,7 @@ public class CandleGameManager2 : MonoBehaviour
     private CandleUIManager candleView;
     private Logging pressureLog;
     private float neutralDuration;
+    [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
     [SerializeField, Min(0.01f)] private float breathEndHoldSeconds = 0.35f;
 
     public bool isGuiding = false;
@@ -206,7 +207,8 @@ public class CandleGameManager2 : MonoBehaviour
                         pressureLog?.logPressure("Inhale Start");
                     }
 
-                    if (sensorData > 0f && sensorData-prevSensorData>=3f)
+                    // A slow pressure ramp is still an exhale; do not require a sudden pressure jump.
+                    if (sensorData >= Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential)))
                     {
                         currState = GameState.EXHALE;
                     }
@@ -250,7 +252,9 @@ public class CandleGameManager2 : MonoBehaviour
                     if (candleView != null)
                         for (int count = previousCount + 1; count <= currentCount; count++)
                             candleView.GetOffCandleStar(count);
-                    neutralDuration = Mathf.Abs(sensorData) <= Mathf.Abs(gameManager.sensorActionPotential)
+                    float endThreshold = Mathf.Clamp(breathEndThreshold, 0f,
+                        Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential)) * 0.9f);
+                    neutralDuration = Mathf.Abs(sensorData) <= endThreshold
                         ? neutralDuration + Time.deltaTime : 0f;
                     if (activeCandle.IsCompleted || neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds))
                     {
