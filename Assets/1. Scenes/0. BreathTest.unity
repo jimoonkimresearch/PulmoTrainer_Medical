@@ -10195,6 +10195,10 @@ MonoBehaviour:
   timeOut: 110
   sensorText: {fileID: 369193661}
   vrSensorText: {fileID: 0}
+  targetDeviceName: Breat
+  targetDeviceAddress: 
+  retryDelaySeconds: 3
+  connectionTimeoutSeconds: 15
   checkingBLE: 1
   logging: {fileID: 684045910}
   currGameManager: {fileID: 1440656213}
