@@ -31,10 +31,10 @@ public sealed class InhaleFoodSelectStickCtrl : PulmoGazeHandler
 
     public override GameObject ResolveTarget(Collider hitCollider)
     {
-        if (hitCollider == null) return null;
+        if (hitCollider == null || !hitCollider.enabled) return null;
         // The manager calls Inhaled on ObjectCtrl's GameObject. Resolve child colliders to it.
         ObjectCtrl food = hitCollider.GetComponentInParent<ObjectCtrl>();
-        return food != null && food.gameObject.activeInHierarchy &&
+        return food != null && food.isActiveAndEnabled && food.gameObject.activeInHierarchy &&
             food.CompareTag("INTERACTABLE") ? food.gameObject : null;
     }
 
