@@ -32,7 +32,6 @@ public class VRUIManager : MonoBehaviour
     private Image fillGuage = null;
     public Image eyeBlocker = null;
 
-    private RectTransform hudTr;
     private float inhaled = 0f;
     public float fillAmt = 0f;
 
@@ -106,35 +105,58 @@ public class VRUIManager : MonoBehaviour
 
     private void Start()
     {
-        fillGuage = GameObject.Find("InhaleFill").GetComponent<Image>();
-        try
+        // Bind presentation first: an absent optional gauge must not stop head tracking.
+        Camera viewCamera = playerTr != null ? playerTr.GetComponent<Camera>() : null;
+        if (viewCamera == null) viewCamera = Camera.main;
+        if (viewCamera != null)
         {
-            exhaleFillGuage = GameObject.Find("ExhaleFill").GetComponent<Image>();
+            BindHudCanvas(hudObj != null ? hudObj.GetComponent<RectTransform>() : null,
+                viewCamera, new Vector3(0.05f, 0f, 0.4f));
+            BindHudCanvas(inhalehudTr, viewCamera, new Vector3(0f, 0f, 0.4f));
         }
-        catch (System.Exception ex)
+        else if (hudObj != null || inhalehudTr != null)
         {
-            Debug.Log(ex);
-            exhaleFillGuage = null;
+            Debug.LogError("VRUIManager: assign the scene Main Camera to Player Tr.", this);
         }
-        
+
+        if (fillGuage == null)
+        {
+            GameObject inhaleFill = GameObject.Find("InhaleFill");
+            if (inhaleFill != null) fillGuage = inhaleFill.GetComponent<Image>();
+        }
+        if (exhaleFillGuage == null)
+        {
+            GameObject exhaleFill = GameObject.Find("ExhaleFill");
+            if (exhaleFill != null) exhaleFillGuage = exhaleFill.GetComponent<Image>();
+        }
         gameManager = GameManager.instance;
-        hudTr = hudObj.GetComponent<RectTransform>();
+    }
+
+    private void BindHudCanvas(RectTransform hud, Camera viewCamera, Vector3 cameraOffset)
+    {
+        if (hud == null) return;
+        Canvas canvas = hud.GetComponentInParent<Canvas>(true);
+        if (canvas == null)
+        {
+            Debug.LogError("VRUIManager: HUD needs a World Space Canvas ancestor.", hud);
+            return;
+        }
+
+        Canvas root = canvas.rootCanvas;
+        var binding = root.GetComponent<PulmoTrainer.UI.PulmoHeadLockedCanvas>();
+        if (binding == null)
+            binding = root.gameObject.AddComponent<PulmoTrainer.UI.PulmoHeadLockedCanvas>();
+        if (!binding.Bind(viewCamera, new Vector3(0f, 0f, 0.4f))) return;
+
+        // Preserve the Canvas hierarchy, layout, scale, and panel visibility.
+        // Set the camera-relative pose once; parenting follows XR's final render pose.
+        hud.position = viewCamera.transform.TransformPoint(cameraOffset);
+        hud.rotation = viewCamera.transform.rotation;
     }
 
     private void OnDisable()
     {
         SceneManager.sceneLoaded -= onSceneLoaded;
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        //Debug.Log(hudTr.position.ToString());
-        //VR hud 위치 조절
-        hudTr.position = playerTr.position + (playerTr.forward*0.4f) + new Vector3(0.05f, 0f, 0f);
-        hudTr.rotation = playerTr.rotation;
-        inhalehudTr.position = playerTr.position + (playerTr.forward * 0.4f);
-        inhalehudTr.rotation = playerTr.rotation;
     }
 
     public void SetHeightProgress(float height)
