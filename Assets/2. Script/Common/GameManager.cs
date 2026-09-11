@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.IO;
 using System;
+using UnityEngine.Serialization;
+using PulmoTrainer.Calibration;
 
 
 public class GameManager : MonoBehaviour
@@ -17,16 +19,21 @@ public class GameManager : MonoBehaviour
     */
 
     //In-game values
-    [SerializeField]
-    public float maxIntake = -4000f;
-    [SerializeField]
-    public float maxFev1 = 1000f;
-    [SerializeField]
-    public float maxFvc = 1100f;
-    [SerializeField]
-    public float maxInhalePressure = -300f;
-    [SerializeField]
-    public float maxExhalePressure = 200f;
+    [FormerlySerializedAs("maxIntake"), SerializeField]
+    private float calibratedInhaleCapacity = -4000f;
+    public float maxIntake => calibratedInhaleCapacity;
+    [FormerlySerializedAs("maxFev1"), SerializeField]
+    private float calibratedFev1 = 1000f;
+    public float maxFev1 => calibratedFev1;
+    [FormerlySerializedAs("maxFvc"), SerializeField]
+    private float calibratedExhaleCapacity = 1100f;
+    public float maxFvc => calibratedExhaleCapacity;
+    [FormerlySerializedAs("maxInhalePressure"), SerializeField]
+    private float calibratedInhalePressure = -300f;
+    public float maxInhalePressure => calibratedInhalePressure;
+    [FormerlySerializedAs("maxExhalePressure"), SerializeField]
+    private float calibratedExhalePressure = 200f;
+    public float maxExhalePressure => calibratedExhalePressure;
 
     [SerializeField]
     public float accelerationRatio = 10f;
@@ -110,15 +117,26 @@ public class GameManager : MonoBehaviour
     /// /// </summary>
     public void InhaleCapacitySetter(float inputMaxInhale, float inputInhalePressure)
     {
-        maxIntake = inputMaxInhale;
-        maxInhalePressure = inputInhalePressure;
+        calibratedInhaleCapacity = inputMaxInhale;
+        calibratedInhalePressure = inputInhalePressure;
     }
 
     public void ExhaleCapacitySetter(float inputMaxExhale, float inputMaxFEV1, float inputExhalePressure)
     {
-        maxFvc = inputMaxExhale;
-        maxFev1 = inputMaxFEV1;
-        maxExhalePressure = inputExhalePressure;
+        calibratedExhaleCapacity = inputMaxExhale;
+        calibratedFev1 = inputMaxFEV1;
+        calibratedExhalePressure = inputExhalePressure;
+    }
+
+    public void ApplyCalibration(BreathCalibration calibration)
+    {
+        if (!calibration.IsUsable)
+            throw new ArgumentException("Calibration requires finite nonzero inhale/exhale measurements.", nameof(calibration));
+        calibratedInhaleCapacity = calibration.InhaleCapacity;
+        calibratedInhalePressure = calibration.InhalePressure;
+        calibratedExhaleCapacity = calibration.ExhaleCapacity;
+        calibratedExhalePressure = calibration.ExhalePressure;
+        calibratedFev1 = calibration.Fev1;
     }
 
     public void LoadGameData()

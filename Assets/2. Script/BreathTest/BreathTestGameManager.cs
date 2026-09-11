@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using PulmoTrainer.Calibration;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
 
@@ -23,11 +24,11 @@ public class BreathTestGameManager : MonoBehaviour
     private float[] maxExhaleCapacity = new float[3];
     private float[] maxFEV1Capacity = new float[3];
 
-    float averageInhaleCapa = 0f;
-    float averageInhalePres = 0f;
-    float averageFEV1 = 0f;
-    float averageExhaleCapa = 0f;
-    float averageExhalePres = 0f;
+    private readonly bool[] completedMeasurements = new bool[3];
+    private bool calibrationApplied;
+    private Balloon balloon;
+    private BreathTestUIManager testView;
+    private Logging pressureLog;
 
     public float sensorData { get; set; }
     public void SetsensorData(float value)
@@ -98,7 +99,15 @@ public class BreathTestGameManager : MonoBehaviour
         loggingManager = GameObject.Find("LoggingManager");
 
         testUIManager = GameObject.Find("UIManager");
-        testUIManager.SendMessage("SetStage", currStage);
+        balloon = balloonControl != null ? balloonControl.GetComponent<Balloon>() : null;
+        testView = testUIManager != null ? testUIManager.GetComponent<BreathTestUIManager>() : null;
+        pressureLog = loggingManager != null ? loggingManager.GetComponent<Logging>() : null;
+        if (balloon == null || testView == null || vrUiManager == null || gameManager == null)
+        {
+            Debug.LogError("BreathTest requires Balloon, UIManager, VRUIManager and GameManager references.", this);
+            return;
+        }
+        testView.SetStage(currStage);
 
         StartCoroutine(CheckState());
 
@@ -133,9 +142,9 @@ public class BreathTestGameManager : MonoBehaviour
                     if (!isGuiding)
                     {
                         isGuiding = true;
-                        vrUiManager.GetComponent<VRUIManager>().ShowTestStartGuide(guideCount);
+                        vrUiManager.ShowTestStartGuide(guideCount);
                         //vrUiManager.SetHeightProgress(0.0f);
-                        testUIManager.SendMessage("ResetUI");
+                        testView.ResetUI();
                     }
 
                     /*if ((Input.touchCount > 0) || Input.GetMouseButtonUp(0))
@@ -144,12 +153,12 @@ public class BreathTestGameManager : MonoBehaviour
                         {
                             if (guideCount == 5)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().HideTestGuide(guideCount);
+                                vrUiManager.HideTestGuide(guideCount);
                                 currState3 = TestGameState.INHALEREADY;
                             }
                             else if (guideCount >= 0 && guideCount < 5)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().ShowTestStartGuide(guideCount);
+                                vrUiManager.ShowTestStartGuide(guideCount);
                                 guideCount++;
                                 yield return new WaitForSeconds(1f);
                             }
@@ -170,13 +179,13 @@ public class BreathTestGameManager : MonoBehaviour
                         {
                             if (guideCount == 5)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().HideTestGuide(guideCount);
+                                vrUiManager.HideTestGuide(guideCount);
                                 guideTime = 0f;
                                 currState3 = TestGameState.INHALEREADY;
                             }
                             else if (guideCount >= 0 && guideCount < 5)
                             {
-                                vrUiManager.GetComponent<VRUIManager>().ShowTestStartGuide(guideCount);
+                                vrUiManager.ShowTestStartGuide(guideCount);
                                 guideCount++;
                                 guideTime = 0f;
                                 yield return new WaitForSeconds(1f);
@@ -217,17 +226,17 @@ public class BreathTestGameManager : MonoBehaviour
                         launchReady = true;
                         if (currStage <= 2)
                         {
-                            balloonControl.SendMessage("ReadyForLaunch");
+                            balloon.ReadyForLaunch();
                         }
                         else
                         {
                             toFinishState();
                             break;
                         }
-                        loggingManager.SendMessage("logPressure", "Inhale Start");
+                        pressureLog?.logPressure("Inhale Start");
                     }
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
-                    loggingManager.SendMessage("logPressure", sensorData.ToString());
+                    pressureLog?.logPressure(sensorData.ToString());
                     clearTime += Time.deltaTime;
                     intakeTime += Time.deltaTime;
 
@@ -238,8 +247,8 @@ public class BreathTestGameManager : MonoBehaviour
                     if (maxInhalePressure[currStage] > sensorData)
                         maxInhalePressure[currStage] = sensorData;
 
-                    vrUiManager.SendMessage("inHaleFill", sensorData);
-                    balloonControl.SendMessage("Intake", sensorData);
+                    vrUiManager.inHaleFill(sensorData);
+                    balloon.Intake(sensorData);
 
 
                     if (sensorData > gameManager.sensorActionPotential && (sensorData - prevSensorData) >= 2f)
@@ -256,11 +265,11 @@ public class BreathTestGameManager : MonoBehaviour
                     if (!isExhaling)
                     {
                         isExhaling = true;
-                        loggingManager.SendMessage("logPressure", "Exhale Start");
+                        pressureLog?.logPressure("Exhale Start");
                     }
                     vrUiManager.exHaleFill(sensorData);
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
-                    loggingManager.GetComponent<Logging>().logPressure(sensorData.ToString());
+                    pressureLog?.logPressure(sensorData.ToString());
                     clearTime += Time.deltaTime;
                     outtakeTime += Time.deltaTime;
                     //vrUiManager.SetHeightProgress(balloonControl.GetComponent<Transform>().position.y);
@@ -280,19 +289,19 @@ public class BreathTestGameManager : MonoBehaviour
                         if (!isBalloonFlying)
                         {
                             isBalloonFlying = true;
-                            balloonControl.SendMessage("startLaunching");
+                            balloon.startLaunching();
                             soundManager.StopMusic();
                         }
-                        balloonControl.SendMessage("FvcOuttake", sensorData);
+                        balloon.FvcOuttake(sensorData);
                         //vrUiManager.HideExhaleHud();
                         //vrUiManager.HideInhaleHud();
                     }
                     else if (outtakeTime < 1f)
                     {
-                        balloonControl.SendMessage("Fev1Outtake", sensorData);
+                        balloon.Fev1Outtake(sensorData);
                     }
 
-                    balloonControl.SendMessage("CheckExhaleEnd");
+                    balloon.CheckExhaleEnd();
 
                     break;
 
@@ -309,8 +318,10 @@ public class BreathTestGameManager : MonoBehaviour
                         selectionStick.SetActive(false);
                         vrUiManager.HideExhaleHud();
                         vrUiManager.HideInhaleHud();
-                        soundManager.SendMessage("ScoreBoardSound");
-                        loggingManager.SendMessage("logClearTime", clearTime.ToString());
+                        soundManager.ScoreBoardSound();
+                        pressureLog?.logClearTime(clearTime.ToString());
+                        if (currStage >= 0 && currStage < completedMeasurements.Length)
+                            completedMeasurements[currStage] = true;
                         currStage = currStage + 1;
                         //vrUiManager.SendMessage("ShowInhaleHud");
                         //Debug.Log("finish");
@@ -338,7 +349,7 @@ public class BreathTestGameManager : MonoBehaviour
         if (currStage >= 3)
         {
             isNextSceneRequested = true;
-            GameManager.instance.SimulNextScene();
+            if (ApplyCompletedCalibration()) gameManager.SimulNextScene();
         }
         else
         {
@@ -349,12 +360,12 @@ public class BreathTestGameManager : MonoBehaviour
     void InhaleFinished()
     {
         currState3 = TestGameState.EXHALE;
-        balloonControl.SendMessage("startLaunching");
+        balloon.startLaunching();
     }
 
     public void SensorStart()
     {
-        balloonControl.SendMessage("InHaleStart");
+        balloon.InHaleStart();
     }
 
     public void toFinishState()
@@ -377,34 +388,33 @@ public class BreathTestGameManager : MonoBehaviour
         //vrUiManager.SendMessage("ShowInhaleHud");
         Debug.Log(currStage);
 
-        // 첫 번째 호흡이 끝난 직후에만 첫 측정값을 기준으로 최대치를 설정한다.
-        // FINISH에서 currStage를 증가시켰으므로 첫 호흡 직후 currStage는 1이다.
-        if (currStage == 1)
-        {
-            averageInhaleCapa = maxInhaleCapacity[0];
-            averageInhalePres = maxInhalePressure[0];
-            averageFEV1 = maxFEV1Capacity[0];
-            averageExhaleCapa = maxExhaleCapacity[0];
-            averageExhalePres = maxExhalePressure[0];
-
-            // 풍선에서 오류로 제대로 측정되지 않은 경우 최소치 입력
-            if (averageInhaleCapa >= -1000f)
-                averageInhaleCapa = -1000f;
-            if (averageExhaleCapa <= 800f)
-                averageExhaleCapa = 800f;
-
-            // 첫 호흡 기준보다 100 높게 설정하고 2·3회차에서는 유지한다.
-            GameManager.instance.maxIntake = averageInhaleCapa - 100f;
-            GameManager.instance.maxInhalePressure = averageInhalePres - 10f;
-            GameManager.instance.maxFev1 = averageFEV1 + 100f;
-            GameManager.instance.maxFvc = averageExhaleCapa + 100f;
-            GameManager.instance.maxExhalePressure = averageExhalePres + 10f;
-        }
-
         // SetNextBreathe가 상태를 INHALEREADY로 바꿀 때까지
         // isEnteringFinish를 true로 유지해 FINISH 재처리를 막는다.
         CancelInvoke(nameof(SetNextBreathe));
         Invoke(nameof(SetNextBreathe), Mathf.Max(0f, nextRoundDelaySeconds));
+    }
+
+    private bool ApplyCompletedCalibration()
+    {
+        if (calibrationApplied) return true;
+        if (currStage != 3 || !completedMeasurements[0] || !completedMeasurements[1] || !completedMeasurements[2])
+            return false;
+        BreathCalibration result = BreathCalibration.AverageOfThree(
+            MeasurementAt(0), MeasurementAt(1), MeasurementAt(2));
+        if (!result.IsUsable)
+        {
+            Debug.LogError("BreathTest: three-round calibration is invalid; repeat the measurement before training.", this);
+            return false;
+        }
+        gameManager.ApplyCalibration(result);
+        calibrationApplied = true;
+        return true;
+    }
+
+    private BreathCalibration MeasurementAt(int index)
+    {
+        return new BreathCalibration(maxInhaleCapacity[index], maxInhalePressure[index],
+            maxExhaleCapacity[index], maxExhalePressure[index], maxFEV1Capacity[index]);
     }
 
     private void SetNextBreathe()
@@ -418,8 +428,8 @@ public class BreathTestGameManager : MonoBehaviour
             return;
         }
         balloon.ResetBalloon();
-        testUIManager.SendMessage("ResetScoreUI");
-        testUIManager.SendMessage("ResetUI");
+        testView.ResetScoreUI();
+        testView.ResetUI();
         vrUiManager.resetFill();
         vrUiManager.ResetOutFill();
         isGuiding = false;
@@ -428,7 +438,7 @@ public class BreathTestGameManager : MonoBehaviour
         isExhaling = false;
         isBalloonFlying = false;
         isNextSceneRequested = false;
-        testUIManager.SendMessage("SetStage", currStage);
+        testView.SetStage(currStage);
         rayCastCam.GetComponent<CamRayCast>().messageSended = false;
         soundManager.GetComponent<BreathTestSoundManager>().PlayMusic();
         sensorData = 0f;
