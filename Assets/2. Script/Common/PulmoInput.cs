@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
@@ -57,4 +59,60 @@ public static class PulmoInput
 
     public static bool Digit1Pressed =>
         Keyboard.current?.digit1Key.wasPressedThisFrame ?? false;
+
+    // Keep serialized KeyCode bindings while reading exclusively through the Input System.
+    private static readonly Dictionary<KeyCode, Key> keyboardKeyCache = new Dictionary<KeyCode, Key>();
+
+    public static bool KeyHeld(KeyCode keyCode)
+    {
+        return TryGetKeyboardKey(keyCode, out var keyboard, out var key) && keyboard[key].isPressed;
+    }
+
+    public static bool KeyPressed(KeyCode keyCode)
+    {
+        return TryGetKeyboardKey(keyCode, out var keyboard, out var key) && keyboard[key].wasPressedThisFrame;
+    }
+
+    private static bool TryGetKeyboardKey(KeyCode keyCode, out Keyboard keyboard, out Key key)
+    {
+        keyboard = Keyboard.current;
+        key = Key.None;
+        if (keyboard == null || keyCode == KeyCode.None) return false;
+        if (keyboardKeyCache.TryGetValue(keyCode, out key)) return key != Key.None;
+
+        string name = keyCode.ToString();
+        // The two enums have different numeric values; never cast between them.
+        if (name.StartsWith("Alpha", StringComparison.Ordinal))
+            name = "Digit" + name.Substring(5);
+        else if (name.StartsWith("Keypad", StringComparison.Ordinal))
+            name = "Numpad" + name.Substring(6);
+        else
+        {
+            switch (name)
+            {
+                case "Return": name = "Enter"; break;
+                case "LeftControl": name = "LeftCtrl"; break;
+                case "RightControl": name = "RightCtrl"; break;
+                case "LeftCommand":
+                case "LeftApple":
+                case "LeftWindows": name = "LeftMeta"; break;
+                case "RightCommand":
+                case "RightApple":
+                case "RightWindows": name = "RightMeta"; break;
+                case "Print": name = "PrintScreen"; break;
+                case "Break": name = "Pause"; break;
+                case "Menu": name = "ContextMenu"; break;
+            }
+        }
+
+        if (!Enum.IsDefined(typeof(KeyCode), keyCode) ||
+            !Enum.TryParse(name, true, out key) || !Enum.IsDefined(typeof(Key), key) || key == Key.None)
+        {
+            key = Key.None;
+            Debug.LogWarning("PulmoInput: unsupported keyboard binding " + keyCode +
+                ". Select a keyboard key in the Inspector.");
+        }
+        keyboardKeyCache[keyCode] = key; // Unsupported bindings warn only once, too.
+        return key != Key.None;
+    }
 }

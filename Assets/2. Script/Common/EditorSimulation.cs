@@ -62,8 +62,8 @@ public class EditorSimulation : MonoBehaviour
     private void Update()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE_WIN
-        bool exhalePressed = Input.GetKey(exhaleKey);
-        bool inhalePressed = Input.GetKey(inhaleKey);
+        bool exhalePressed = PulmoInput.KeyHeld(exhaleKey);
+        bool inhalePressed = PulmoInput.KeyHeld(inhaleKey);
 
         float targetPressure = 0f;
 
@@ -80,11 +80,11 @@ public class EditorSimulation : MonoBehaviour
             Debug.Log("Simulation Input Error: Check input");
         }
 
-        if (Input.GetKeyDown(inhaleKey) && !exhalePressed)
+        if (PulmoInput.KeyPressed(inhaleKey) && !exhalePressed)
         {
             simulatedPressure = -Mathf.Min(stateTriggerStep, maxPressure);
         }
-        else if (Input.GetKeyDown(exhaleKey) && !inhalePressed)
+        else if (PulmoInput.KeyPressed(exhaleKey) && !inhalePressed)
         {
             simulatedPressure = Mathf.Min(stateTriggerStep, maxPressure);
         }
