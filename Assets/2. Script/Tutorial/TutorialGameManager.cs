@@ -40,7 +40,7 @@ public class TutorialGameManager : MonoBehaviour
     public VRUIManager vrUiManager = null;
     public TutorialSoundManager soundManager = null;
     
-    public GameObject currObjSeeing = null;
+    [SerializeField] private GameObject currObjSeeing = null;
 
     //public enum GameState1
     //{
@@ -214,11 +214,32 @@ public class TutorialGameManager : MonoBehaviour
 
     public void EyesOnBall()
     {
-        currState2 = GameState2.BREATHEREADY;
+        if (currState2 == GameState2.SEEKINGTARGET)
+            currState2 = GameState2.BREATHEREADY;
+    }
+
+    public bool TrySelectTarget(TutorialObjectCtrl target)
+    {
+        if (target == null || !target.isActiveAndEnabled) return false;
+        if (currObjSeeing == target.gameObject)
+            return currState2 == GameState2.BREATHEREADY || currState2 == GameState2.BREATHING;
+        if (currObjSeeing != null || currState2 != GameState2.SEEKINGTARGET) return false;
+        currObjSeeing = target.gameObject;
+        EyesOnBall();
+        return true;
+    }
+
+    public void ReleaseTarget(TutorialObjectCtrl target)
+    {
+        if (target == null || currObjSeeing != target.gameObject) return;
+        currObjSeeing = null;
+        if (currState2 == GameState2.BREATHEREADY || currState2 == GameState2.BREATHING)
+            EyesOffBall();
     }
 
     public void EyesOffBall()
     {
+        currObjSeeing = null;
         neutralDuration = 0f;
         breathingTarget = null;
         vrUiManager.ResetOutFill();
