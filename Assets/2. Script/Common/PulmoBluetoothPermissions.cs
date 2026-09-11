@@ -12,6 +12,37 @@ namespace PulmoTrainer.Bluetooth
     {
         public bool IsGranted { get; private set; }
 
+        public bool HasRequiredAccess()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!HasAll(new[] { Permission.CoarseLocation, Permission.FineLocation })) return false;
+            using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
+                return version.GetStatic<int>("SDK_INT") < 31 || HasAll(new[] {
+                    "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT" });
+#else
+            return true;
+#endif
+        }
+
+        public bool IsLocationServiceEnabled()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // classes.jar otherwise falls back to Companion Device pairing, not the normal BLE scan.
+            using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var location = activity.Call<AndroidJavaObject>("getSystemService", "location"))
+            using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
+            {
+                if (location == null) return false;
+                if (version.GetStatic<int>("SDK_INT") >= 28) return location.Call<bool>("isLocationEnabled");
+                return location.Call<bool>("isProviderEnabled", "gps") ||
+                    location.Call<bool>("isProviderEnabled", "network");
+            }
+#else
+            return true;
+#endif
+        }
+
         public IEnumerator RequestAccess()
         {
             IsGranted = false;
@@ -61,3 +92,4 @@ namespace PulmoTrainer.Bluetooth
 #endif
     }
 }
+
