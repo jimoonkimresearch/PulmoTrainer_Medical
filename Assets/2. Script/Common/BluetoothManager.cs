@@ -418,7 +418,7 @@ public class BluetoothManager : MonoBehaviour
     {
         if (ConnectionStatus == status) return;
         ConnectionStatus = status;
-        if (statusView != null) statusView.Show(status);
+        if (statusView != null) statusView.SetStatus(status);
         Debug.Log("[PulmoBLE] " + status, this);
     }
 
@@ -432,8 +432,8 @@ public class BluetoothManager : MonoBehaviour
                 if (label.name != "ArduinoState") continue;
                 statusView = label.GetComponent<PulmoBluetoothStatusView>();
                 if (statusView == null) statusView = label.gameObject.AddComponent<PulmoBluetoothStatusView>();
-                statusView.Initialize(label, Camera.main);
-                statusView.Show(ConnectionStatus);
+                statusView.Initialize(label);
+                statusView.SetStatus(ConnectionStatus);
                 return;
             }
         }

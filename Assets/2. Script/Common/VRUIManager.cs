@@ -105,6 +105,7 @@ public class VRUIManager : MonoBehaviour
 
     private void Start()
     {
+        ConfigureStatusVisibility();
         // Bind presentation first: an absent optional gauge must not stop head tracking.
         Camera viewCamera = playerTr != null ? playerTr.GetComponent<Camera>() : null;
         if (viewCamera == null) viewCamera = Camera.main;
@@ -130,6 +131,44 @@ public class VRUIManager : MonoBehaviour
             if (exhaleFill != null) exhaleFillGuage = exhaleFill.GetComponent<Image>();
         }
         gameManager = GameManager.instance;
+    }
+
+    private void ConfigureStatusVisibility()
+    {
+        if (hudObj == null) return;
+        PulmoTrainer.Bluetooth.PulmoBluetoothStatusView view = null;
+        foreach (Text text in hudObj.GetComponentsInChildren<Text>(true))
+        {
+            if (text.name != "ArduinoState") continue;
+            view = text.GetComponent<PulmoTrainer.Bluetooth.PulmoBluetoothStatusView>();
+            if (view == null) view = text.gameObject.AddComponent<PulmoTrainer.Bluetooth.PulmoBluetoothStatusView>();
+            view.Initialize(text);
+            break;
+        }
+        if (view == null) return;
+        var panels = new List<GameObject>();
+        AddPanels(panels, rocketStartGuidePanels);
+        AddPanels(panels, rocketGuidePanels);
+        AddPanels(panels, candleStartGuidePanels);
+        AddPanels(panels, inhaleStartGuidePanels);
+        AddPanels(panels, tutoStartGuidePanels);
+        AddPanels(panels, testStartGuidePanels);
+        panels.Add(candleGuidePanel);
+        panels.Add(inhaleGuidePanel);
+        panels.Add(testGuidePanel);
+        if (eyeBlocker != null) panels.Add(eyeBlocker.gameObject);
+        // Cache scene result panels once, including initially inactive scoreboards.
+        foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+            foreach (Transform item in root.GetComponentsInChildren<Transform>(true))
+                if (item.name == "Scoreboard") panels.Add(item.gameObject);
+        var visibility = GetComponent<PulmoTrainer.UI.PulmoStatusVisibility>();
+        if (visibility == null) visibility = gameObject.AddComponent<PulmoTrainer.UI.PulmoStatusVisibility>();
+        visibility.Configure(view, panels);
+    }
+
+    private static void AddPanels(List<GameObject> destination, GameObject[] panels)
+    {
+        if (panels != null) destination.AddRange(panels);
     }
 
     private void BindHudCanvas(RectTransform hud, Camera viewCamera, Vector3 cameraOffset)
