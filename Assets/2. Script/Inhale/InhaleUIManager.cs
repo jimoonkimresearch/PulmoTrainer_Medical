@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -33,11 +33,13 @@ public class InhaleUIManager : MonoBehaviour
             scoreText.text = ("음식" + InhaleGameManager.instance.currFoodeat
                 + "개를 먹었어요!\n 15개까지 더 먹어볼까요?");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
         }
         else
         {
             scoreText.text = ("음식 15개를 다 먹었어요!");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
             perfectEffect.Play();
             soundManager.OnPerfectGame();
         }
@@ -48,6 +50,7 @@ public class InhaleUIManager : MonoBehaviour
     public void ResetScoreUI()
     {
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -34,12 +34,14 @@ public class RocketUIManager : MonoBehaviour
         {
             scoreText.text = (height.ToString() + "미터까지 비행에 성공했어요!");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
             StartCoroutine(StarsAndProgress());
         }
         else
         {
             scoreText.text = (vRUIManager.maxRocketHeight + "미터까지 비행에 성공했어요!\n최고높이에요! 굉장해요!");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
             perfectEffect.gameObject.SetActive(true);
             perfectEffect.Play();
             soundManager.OnPerfectGame();
@@ -57,6 +59,7 @@ public class RocketUIManager : MonoBehaviour
             perfectEffect.gameObject.SetActive(false);
         }
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)

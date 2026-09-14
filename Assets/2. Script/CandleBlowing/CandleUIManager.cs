@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -67,12 +67,14 @@ public class CandleUIManager : MonoBehaviour
                 scoreText.text = ("촛불 " + (10 * currStage) + "개 중에 " + candleOffed + "개를 껐어요!"
                 + "\n다음엔 더 많이 끌수 있을까요?");
                 scoreTr.gameObject.SetActive(true);
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
                 soundManager.ScoreBoardSound();
             }
             else if (candleOffed >= (10 * currStage))
             {
                 scoreText.text = ("촛불을 모두 다 껐어요! 굉장해요!");
                 scoreTr.gameObject.SetActive(true);
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
                 //올클리어 이펙트
                 perfectEffect.Play();
                 soundManager.OnPerfectGame();
@@ -88,6 +90,7 @@ public class CandleUIManager : MonoBehaviour
         CancelInvoke();
         if (perfectEffect != null) perfectEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)
