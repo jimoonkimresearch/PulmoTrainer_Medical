@@ -20,7 +20,9 @@ public class CandleControl2 : MonoBehaviour
     private Quaternion[] initialRotations;
     private Outline outline;
     private bool initialized;
-    public bool IsCompleted { get; private set; }
+    public bool IsAttemptFinished { get; private set; }
+    public bool IsFullyExtinguished => candleFires != null && candleFires.Length > 0 &&
+        extinguishedCount >= candleFires.Length;
     public int ExtinguishedCount => extinguishedCount;
     public int candlesForOff => extinguishedCount;
     public float DoseProgress => Mathf.Clamp01(accumulatedDose / RequiredDose);
@@ -51,14 +53,14 @@ public class CandleControl2 : MonoBehaviour
     public void Intake(float pressure)
     {
         EnsureInitialized();
-        if (IsCompleted || pressure >= 0f || GameManager.instance == null) return;
+        if (IsAttemptFinished || pressure >= 0f || GameManager.instance == null) return;
         TiltFire(pressure, GameManager.instance.maxInhalePressure);
     }
 
     public void ProcessExhale(float pressure, float deltaTime)
     {
         EnsureInitialized();
-        if (IsCompleted || !isActiveAndEnabled || GameManager.instance == null ||
+        if (IsAttemptFinished || !isActiveAndEnabled || GameManager.instance == null ||
             deltaTime <= 0f || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) ||
             float.IsNaN(pressure) || float.IsInfinity(pressure)) return;
         float calibration = GameManager.instance.maxExhalePressure;
@@ -79,7 +81,7 @@ public class CandleControl2 : MonoBehaviour
         if (DoseProgress >= 1f && candleFires.Length > 0 && extinguishedCount == candleFires.Length)
         {
             foreach (FireControl flame in flames) if (flame != null) flame.FinishExtinguishing();
-            CompleteInteraction();
+            FinishAttempt();
         }
     }
 
@@ -92,22 +94,19 @@ public class CandleControl2 : MonoBehaviour
                 candleFires[i].localRotation = initialRotations[i] * Quaternion.Euler(angle, 0f, 0f);
     }
 
-    public void CompleteInteraction()
+    public void SetHighlighted(bool highlighted)
     {
         EnsureInitialized();
-        if (IsCompleted || DoseProgress < 1f || candleFires.Length == 0 ||
-            extinguishedCount != candleFires.Length) return;
-        for (int i = 0; i < candleFires.Length; i++)
-        {
-            if (candleFires[i] == null) return;
-            if (flames[i] != null)
-            {
-                if (!flames[i].IsExtinguished) return;
-            }
-            else if (candleFires[i].gameObject.activeSelf) return;
-        }
-        IsCompleted = true;
-        if (outline != null) outline.enabled = false;
+        if (outline != null) outline.enabled = highlighted && !IsAttemptFinished;
+    }
+
+    public void FinishAttempt()
+    {
+        EnsureInitialized();
+        if (IsAttemptFinished) return;
+        // Partial and full attempts both lock this set, preserving its earned dose and flames.
+        IsAttemptFinished = true;
+        SetHighlighted(false);
         foreach (Collider collider in selectionColliders) if (collider != null) collider.enabled = false;
     }
 
@@ -118,7 +117,7 @@ public class CandleControl2 : MonoBehaviour
         CancelInvoke();
         accumulatedDose = 0f;
         extinguishedCount = 0;
-        IsCompleted = false;
+        IsAttemptFinished = false;
         if (outline != null) outline.enabled = false;
         for (int i = 0; i < selectionColliders.Length; i++)
             if (selectionColliders[i] != null) selectionColliders[i].enabled = colliderEnabled[i];

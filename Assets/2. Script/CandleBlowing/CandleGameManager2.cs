@@ -20,6 +20,15 @@ public class CandleGameManager2 : MonoBehaviour
     private float neutralDuration;
     [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
     [SerializeField, Min(0.01f)] private float breathEndHoldSeconds = 0.35f;
+    [Tooltip("Safety limit for one set's inhale/exhale attempt, starting at the first inhale.")]
+    [SerializeField, Min(1f)] private float attemptTimeoutSeconds = 20f;
+    private float attemptElapsed;
+    private bool attemptEnding;
+    private Coroutine attemptTransition;
+    private enum CandleAttemptEndReason { FullyExtinguished, BreathEnded, GazeLost, Timeout }
+    private bool IsBreathing => currState == GameState.INHALE || currState == GameState.EXHALE;
+    public bool CanTrackCandleGaze => isActiveAndEnabled && interactions != null && !attemptEnding &&
+        (currState == GameState.SEEKINGCANDLE || currState == GameState.INHALEREADY || IsBreathing);
 
     public bool isGuiding = false;
     public bool inhaleReady = false;
@@ -97,6 +106,17 @@ public class CandleGameManager2 : MonoBehaviour
     {
         while (true)
         {
+            if (attemptEnding) { yield return null; continue; }
+            if (IsBreathing && activeCandle != null)
+            {
+                attemptElapsed += Time.deltaTime;
+                if (attemptElapsed >= Mathf.Max(1f, attemptTimeoutSeconds))
+                {
+                    EndActiveAttempt(CandleAttemptEndReason.Timeout);
+                    yield return null;
+                    continue;
+                }
+            }
             switch (currState)
             {
                 case (GameState.GUIDE):
@@ -190,12 +210,14 @@ public class CandleGameManager2 : MonoBehaviour
                     if (sensorData <= gameManager.sensorActionPotential * -1f)
                     {
                         activeCandle = SelectedCandle();
-                        if (activeCandle == null || activeCandle.IsCompleted)
+                        if (!CanSelectCandle(activeCandle))
                         {
+                            activeCandle = null;
                             currState = GameState.SEEKINGCANDLE;
                             break;
                         }
                         ResetBreathState();
+                        attemptElapsed = 0f;
                         currState = GameState.INHALE;
                     }
                     break;
@@ -256,25 +278,10 @@ public class CandleGameManager2 : MonoBehaviour
                         Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential)) * 0.9f);
                     neutralDuration = Mathf.Abs(sensorData) <= endThreshold
                         ? neutralDuration + Time.deltaTime : 0f;
-                    if (activeCandle.IsCompleted || neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds))
-                    {
-                        // A partial breath ends the attempt, not the group. Dose/flames/colliders stay owned by the candle.
-                        if (activeCandle.IsCompleted) blowedCandles++;
-                        activeCandle = null;
-                        ResetBreathState();
-                        vrUiManager.resetFill();
-                        if (blowedCandles >= currStage)
-                        {
-                            yield return new WaitForSeconds(1f);
-                            currState = GameState.FINISH;
-                        }
-                        else
-                        {
-                            yield return new WaitForSeconds(0.5f);
-                            if (candleView != null) candleView.ResetShowStars();
-                            currState = GameState.SEEKINGCANDLE;
-                        }
-                    }
+                    if (activeCandle.IsFullyExtinguished)
+                        EndActiveAttempt(CandleAttemptEndReason.FullyExtinguished);
+                    else if (neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds))
+                        EndActiveAttempt(CandleAttemptEndReason.BreathEnded);
                     break;
 
                 case (GameState.FINISH):
@@ -320,6 +327,75 @@ public class CandleGameManager2 : MonoBehaviour
             ? interactions[currCandleSeeing] : null;
     }
 
+    public bool CanSelectCandle(CandleControl2 candle)
+    {
+        if (!CanTrackCandleGaze || candle == null || !candle.isActiveAndEnabled || candle.IsAttemptFinished)
+            return false;
+        int index = System.Array.IndexOf(interactions, candle);
+        if (index < 0 || index >= currStage) return false;
+        return !IsBreathing || candle == activeCandle;
+    }
+
+    public bool TrySelectCandle(CandleControl2 candle)
+    {
+        if (!CanSelectCandle(candle)) return false;
+        if (IsBreathing) return true; // Only the current set can reach here; never switch during a breath.
+        currCandleSeeing = System.Array.IndexOf(interactions, candle);
+        vrUiManager.SetExhaleProgress(candle.DoseProgress);
+        if (candleView != null) candleView.ResetShowStars();
+        currState = GameState.INHALEREADY;
+        return true;
+    }
+
+    public void NotifyCandleGazeLost(CandleControl2 candle)
+    {
+        if (attemptEnding) return;
+        if (IsBreathing)
+        {
+            if (candle == activeCandle) EndActiveAttempt(CandleAttemptEndReason.GazeLost);
+            return;
+        }
+        if (currState != GameState.INHALEREADY || candle != SelectedCandle()) return;
+        currState = GameState.SEEKINGCANDLE;
+        inhaleReady = false;
+        vrUiManager.HideInhaleHud();
+        vrUiManager.HideExhaleHud();
+        vrUiManager.resetFill();
+    }
+
+    private void EndActiveAttempt(CandleAttemptEndReason reason)
+    {
+        if (activeCandle == null || attemptEnding) return;
+        if (reason == CandleAttemptEndReason.FullyExtinguished && !activeCandle.IsFullyExtinguished) return;
+        // Latch before disabling colliders: selector exit callbacks cannot count this attempt twice.
+        attemptEnding = true;
+        activeCandle.FinishAttempt();
+        activeCandle = null;
+        blowedCandles++;
+        candleOffedOnThisStage = CountExtinguishedCandles();
+        ResetBreathState();
+        vrUiManager.resetFill();
+        attemptTransition = StartCoroutine(AdvanceAfterAttempt());
+    }
+
+    private int CountExtinguishedCandles()
+    {
+        int score = 0;
+        for (int i = 0; i < Mathf.Min(currStage, interactions.Length); i++)
+            if (interactions[i] != null) score += interactions[i].ExtinguishedCount;
+        return score;
+    }
+
+    private IEnumerator AdvanceAfterAttempt()
+    {
+        bool stageFinished = blowedCandles >= currStage;
+        yield return new WaitForSeconds(stageFinished ? 1f : 0.5f);
+        if (!stageFinished && candleView != null) candleView.ResetShowStars();
+        currState = stageFinished ? GameState.FINISH : GameState.SEEKINGCANDLE;
+        attemptEnding = false;
+        attemptTransition = null;
+    }
+
     private void ResetBreathState()
     {
         outtakeTime = intakeTime = neutralDuration = 0f;
@@ -329,22 +405,12 @@ public class CandleGameManager2 : MonoBehaviour
 
     public void EyesOnCandle()
     {
-        if (currState == GameState.INHALE || currState == GameState.EXHALE) return;
-        CandleControl2 candidate = SelectedCandle();
-        if (candidate == null || candidate.IsCompleted) return;
-        vrUiManager.SetExhaleProgress(candidate.DoseProgress);
-        if (candleView != null) candleView.ShowCurrentCandleProgress(candidate.ExtinguishedCount);
-        currState = GameState.INHALEREADY;
+        TrySelectCandle(SelectedCandle());
     }
 
     public void EyesOffCandle()
     {
-        if (currState == GameState.INHALE || currState == GameState.EXHALE) return;
-        currState = GameState.SEEKINGCANDLE;
-        inhaleReady = false;
-        vrUiManager.HideInhaleHud();
-        vrUiManager.HideExhaleHud();
-        vrUiManager.resetFill();
+        NotifyCandleGazeLost(activeCandle != null ? activeCandle : SelectedCandle());
     }
 
     public void toNextStage()
@@ -372,6 +438,10 @@ public class CandleGameManager2 : MonoBehaviour
     private void resetStage(int stage)
     {
         vrUiManager.BlockEye();
+        if (attemptTransition != null) StopCoroutine(attemptTransition);
+        attemptTransition = null;
+        attemptEnding = false;
+        attemptElapsed = 0f;
         ResetBreathState();
         activeCandle = null;
         clearTime = guideTime = currStateTime = sensorData = prevSensorData = 0f;
