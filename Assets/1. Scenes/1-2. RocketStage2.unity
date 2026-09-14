@@ -8360,14 +8360,12 @@ MonoBehaviour:
   gameManager: {fileID: 0}
   playerCtrl: {fileID: 124406241}
   maxRiseSpeed: 200
-  riseResponseSeconds: 0.35
+  riseResponseSeconds: 0.315
   releaseResponseSeconds: 0.6
-  arrivalResponseSeconds: 0.4
-  finishPositionTolerance: 0.05
-  finishSpeedTolerance: 0.05
-  finishHoldSeconds: 0.06
   breathEndThreshold: 0.2
-  breathEndHoldSeconds: 0.35
+  inputLockNeutralSeconds: 0.12
+  postFinishRiseSpeed: 5
+  postFinishDeceleration: 60
 --- !u!114 &1108781264
 MonoBehaviour:
   m_ObjectHideFlags: 0

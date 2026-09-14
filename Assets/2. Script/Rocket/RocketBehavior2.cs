@@ -24,21 +24,22 @@ public class RocketBehavior2 : MonoBehaviour
 
     [SerializeField, Min(0.1f)] private float maxRiseSpeed = 200f;
     [Tooltip("Seconds to close 95% of an increase in target speed.")]
-    [SerializeField, Min(0.01f)] private float riseResponseSeconds = 0.35f;
+    [SerializeField, Min(0.01f)] private float riseResponseSeconds = 0.315f;
     [Tooltip("Seconds to close 95% of a decrease in target speed while blowing.")]
     [SerializeField, Min(0.01f)] private float releaseResponseSeconds = 0.6f;
-    [SerializeField, Min(0.01f)] private float arrivalResponseSeconds = 0.4f;
-    [SerializeField, Min(0.001f)] private float finishPositionTolerance = 0.05f;
-    [SerializeField, Min(0.001f)] private float finishSpeedTolerance = 0.05f;
-    [SerializeField, Min(0.01f)] private float finishHoldSeconds = 0.06f;
     [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
-    [SerializeField, Min(0.01f)] private float breathEndHoldSeconds = 0.35f;
+    [Tooltip("Continuous neutral confirmation before locking this stage's single breath.")]
+    [SerializeField, Min(0.01f)] private float inputLockNeutralSeconds = 0.12f;
+    [Tooltip("Visual-only upward speed after the score and player position are fixed.")]
+    [SerializeField, Min(0.01f)] private float postFinishRiseSpeed = 5f;
+    [SerializeField, Min(0.01f)] private float postFinishDeceleration = 60f;
+    private const float ArrivalEpsilon = 0.001f;
     private Vector3 initialPosition;
     private Quaternion initialRotation;
-    private Vector3 initialScale;
+    private RocketDeformation deformation;
     private bool initialized;
     private bool launchStarted;
-    private bool exhaleEnded;
+    private bool inputLocked;
     private bool finishStarted;
     private float totalInhale;
     private float totalExhale;
@@ -48,8 +49,7 @@ public class RocketBehavior2 : MonoBehaviour
     private float currentRiseSpeed;
     private float targetHeight;
     private float finalGoalHeight;
-    private float settledSeconds;
-    private bool coasting;
+    private float flightHeight;
     private EffectContol effects;
     private OnLaunch ceiling;
     private RocketUIManager view;
@@ -75,7 +75,7 @@ public class RocketBehavior2 : MonoBehaviour
         if (rocketRb == null) rocketRb = GetComponent<Rigidbody>();
         initialPosition = rocketTr.position;
         initialRotation = rocketTr.rotation;
-        initialScale = rocketTr.localScale;
+        deformation = new RocketDeformation(rocketTr);
         effects = EffectCtrl != null ? EffectCtrl.GetComponent<EffectContol>() : null;
         ceiling = Ceiling != null ? Ceiling.GetComponent<OnLaunch>() : null;
         view = UIManager != null ? UIManager.GetComponent<RocketUIManager>() : null;
@@ -91,6 +91,7 @@ public class RocketBehavior2 : MonoBehaviour
 
     public void InHaleStart()
     {
+        if (launchStarted || inputLocked || finishStarted) return;
         if (rocketGameManager != null) rocketGameManager.currState = RocketGameManager.RocketState.INHALE;
     }
     public void ReadyForLaunch()
@@ -99,17 +100,21 @@ public class RocketBehavior2 : MonoBehaviour
     }
     public void Intake(float sensorInput)
     {
-        if (gameManager == null || sensorInput >= 0f || launchStarted) return;
+        if (gameManager == null || sensorInput >= 0f || launchStarted || inputLocked || finishStarted ||
+            float.IsNaN(sensorInput) || float.IsInfinity(sensorInput)) return;
         totalInhale += sensorInput;
         float ratio = gameManager.maxIntake < 0f ? Mathf.Clamp01(totalInhale / gameManager.maxIntake) : 0f;
-        rocketTr.localScale = Vector3.Scale(initialScale,
-            new Vector3(1f + 0.1f * ratio, 1f - 0.5f * ratio, 1f + 0.1f * ratio));
+        deformation.ApplyInhale(ratio);
+        Vector3 anchoredPosition = rocketTr.position;
+        anchoredPosition.y = initialPosition.y + deformation.VerticalOffset;
+        if (rocketRb != null) rocketRb.position = anchoredPosition;
+        rocketTr.position = anchoredPosition;
         SetText(IntakeInput, totalInhale);
     }
     public void startLaunching()
     {
         EnsureInitialized();
-        if (launchStarted || finishStarted) return;
+        if (launchStarted || inputLocked || finishStarted) return;
         launchStarted = true;
         exhaleSeconds = 0f;
         neutralSeconds = 0f;
@@ -118,7 +123,7 @@ public class RocketBehavior2 : MonoBehaviour
 
     public void ProcessExhale(float pressure, float deltaTime)
     {
-        if (!launchStarted || exhaleEnded || float.IsNaN(pressure) || float.IsInfinity(pressure) ||
+        if (!launchStarted || inputLocked || finishStarted || float.IsNaN(pressure) || float.IsInfinity(pressure) ||
             deltaTime <= 0f || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime)) return;
         // Match BreathTest's frame accumulation; no legacy force/speed multipliers in calibration units.
         float sample = Mathf.Max(0f, pressure);
@@ -127,9 +132,9 @@ public class RocketBehavior2 : MonoBehaviour
         if (exhaleSeconds < 1f) totalFev1 += sample;
         SetText(fev1Input, totalFev1);
         SetText(fvcInput, totalExhale);
-        coasting = Mathf.Abs(pressure) <= Mathf.Max(0f, breathEndThreshold);
-        neutralSeconds = coasting ? neutralSeconds + deltaTime : 0f;
-        if (!coasting)
+        bool neutral = Mathf.Abs(pressure) <= Mathf.Max(0f, breathEndThreshold);
+        neutralSeconds = neutral ? neutralSeconds + deltaTime : 0f;
+        if (!neutral)
         {
             float intensity = gameManager != null && gameManager.maxExhalePressure > 0f
                 ? Mathf.Clamp01(sample / gameManager.maxExhalePressure) : 0f;
@@ -138,74 +143,66 @@ public class RocketBehavior2 : MonoBehaviour
             float blend = 1f - Mathf.Exp(-Mathf.Log(20f) * deltaTime / Mathf.Max(0.01f, response));
             currentRiseSpeed = Mathf.Lerp(currentRiseSpeed, targetSpeed, blend);
         }
-        // Start braking during the neutral hold, using the velocity already earned by the breath.
-        // Renewed input can resume before the hold expires; a confirmed end never accelerates again.
-        if (PerformanceRatio >= 1f || neutralSeconds >= Mathf.Max(0.01f, breathEndHoldSeconds))
-        {
-            exhaleEnded = true;
-            coasting = true;
-            finalGoalHeight = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
-        }
+        // One brief noise sample is tolerated; a confirmed end latches until ResetRocket.
+        if (PerformanceRatio >= 1f || neutralSeconds >= Mathf.Max(0.01f, inputLockNeutralSeconds))
+            LockBreathInput();
+    }
+
+    private void LockBreathInput()
+    {
+        if (inputLocked) return;
+        inputLocked = true;
+        finalGoalHeight = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
     }
 
     private void FixedUpdate()
     {
-        if (!launchStarted || finishStarted) return;
-        float goal = exhaleEnded ? finalGoalHeight : MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
+        if (!launchStarted) return;
+        float deltaTime = Time.fixedDeltaTime;
         Vector3 next = rocketRb != null ? rocketRb.position : rocketTr.position;
-        float remaining = Mathf.Max(0f, goal - next.y);
-        float step;
-        if (coasting)
+        if (finishStarted)
         {
-            step = BrakeToGoal(remaining, Time.fixedDeltaTime);
+            currentRiseSpeed = Mathf.MoveTowards(currentRiseSpeed, Mathf.Max(0.01f, postFinishRiseSpeed),
+                Mathf.Max(0.01f, postFinishDeceleration) * deltaTime);
+            flightHeight += currentRiseSpeed * deltaTime;
+        }
+        else if (inputLocked)
+        {
+            // Cross the score height without stopping at it while interpolation catches up.
+            // The goal is frozen; this travel cannot add score or breath performance.
+            flightHeight += currentRiseSpeed * deltaTime;
         }
         else
         {
-            // The accumulated performance is also a height budget: do not overshoot it while blowing.
-            currentRiseSpeed = Mathf.Min(currentRiseSpeed,
-                remaining / Mathf.Max(Time.fixedDeltaTime, arrivalResponseSeconds));
-            step = currentRiseSpeed * Time.fixedDeltaTime;
+            float goal = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
+            // Performance limits scored travel, not the intensity-driven velocity response.
+            flightHeight = Mathf.Min(goal, flightHeight + currentRiseSpeed * deltaTime);
         }
-        next.y += Mathf.Min(remaining, step);
+        deformation.RestoreDuringFlight(deltaTime);
+        next.y = flightHeight + deformation.VerticalOffset;
         if (rocketRb != null) rocketRb.MovePosition(next);
         else rocketTr.position = next;
-        rocketTr.localScale = Vector3.MoveTowards(rocketTr.localScale, initialScale, Time.fixedDeltaTime * 3f);
-    }
-
-    private float BrakeToGoal(float remaining, float deltaTime)
-    {
-        if (remaining <= 0f) { currentRiseSpeed = 0f; return 0f; }
-        if (currentRiseSpeed <= 0f) return 0f;
-        // v^2 = 2*a*d: integrate the stopping distance, without a second boost or a position snap.
-        float deceleration = currentRiseSpeed * currentRiseSpeed / (2f * remaining);
-        float brakingTime = Mathf.Min(deltaTime, currentRiseSpeed / deceleration);
-        float distance = currentRiseSpeed * brakingTime - 0.5f * deceleration * brakingTime * brakingTime;
-        currentRiseSpeed = Mathf.Max(0f, currentRiseSpeed - deceleration * brakingTime);
-        return Mathf.Min(remaining, distance);
     }
 
     private void LateUpdate()
     {
-        if (!exhaleEnded || finishStarted) return;
+        if (!inputLocked || finishStarted) return;
         float physicalHeight = rocketRb != null ? rocketRb.position.y : Height;
-        bool settled = Mathf.Abs(physicalHeight - finalGoalHeight) <= finishPositionTolerance &&
-            Mathf.Abs(Height - finalGoalHeight) <= finishPositionTolerance &&
-            currentRiseSpeed <= finishSpeedTolerance;
-        settledSeconds = settled ? settledSeconds + Time.deltaTime : 0f;
-        if (settledSeconds >= Mathf.Max(0.01f, finishHoldSeconds)) FinishRocket();
+        // Wait for MovePosition to be visible, but do not brake to zero or require a settle hold.
+        if (flightHeight >= finalGoalHeight && physicalHeight >= finalGoalHeight - ArrivalEpsilon &&
+            Height >= finalGoalHeight - ArrivalEpsilon) FinishRocket();
     }
 
     private void FinishRocket()
     {
         if (finishStarted) return;
         finishStarted = true;
-        launchStarted = false;
         if (playerCtrl != null) playerCtrl.EndFollowing();
         if (effects != null) effects.ResetEffects();
         SetEffect(boostEffect, false);
         SetEffect(startEffect, false);
         SetEffect(endEffect, true);
-        // Use the calibrated goal for scoring only after the displayed pose agrees within tolerance.
+        // The score and player stop here; FixedUpdate keeps the rocket drifting upwards.
         if (view != null) view.ScoreUI(finalGoalHeight);
         if (rocketGameManager != null) rocketGameManager.toFinishState();
     }
@@ -228,12 +225,12 @@ public class RocketBehavior2 : MonoBehaviour
             rocketRb.rotation = initialRotation;
         }
         rocketTr.SetPositionAndRotation(initialPosition, initialRotation);
-        rocketTr.localScale = initialScale;
+        deformation.ResetScale();
         totalInhale = totalExhale = totalFev1 = 0f;
         exhaleSeconds = neutralSeconds = currentRiseSpeed = 0f;
-        settledSeconds = 0f;
+        flightHeight = initialPosition.y;
         finalGoalHeight = initialPosition.y;
-        launchStarted = exhaleEnded = finishStarted = coasting = false;
+        launchStarted = inputLocked = finishStarted = false;
         SetText(IntakeInput, 0f);
         SetText(fev1Input, 0f);
         SetText(fvcInput, 0f);
