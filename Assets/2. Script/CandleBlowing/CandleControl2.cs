@@ -8,7 +8,8 @@ public class CandleControl2 : MonoBehaviour
     [SerializeField] private float tiltRatio = 300f;
     [SerializeField, HideInInspector] private float airPerOffcandle = 220f;
     [SerializeField, Range(0f, 1f)] private float minimumEffectiveIntensity = 0f;
-    [SerializeField, Min(0.01f)] private float targetDose = 2f;
+    [Tooltip("Usability-test dose; tune in the Inspector after the pilot.")]
+    [SerializeField, Min(0.01f)] private float targetDose = 1f;
     [SerializeField, Min(0.01f)] private float difficultyMultiplier = 1f;
     private float accumulatedDose;
     private int extinguishedCount;
@@ -58,12 +59,14 @@ public class CandleControl2 : MonoBehaviour
     {
         EnsureInitialized();
         if (IsCompleted || !isActiveAndEnabled || GameManager.instance == null ||
-            deltaTime <= 0f || float.IsNaN(pressure) || float.IsInfinity(pressure)) return;
+            deltaTime <= 0f || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) ||
+            float.IsNaN(pressure) || float.IsInfinity(pressure)) return;
         float calibration = GameManager.instance.maxExhalePressure;
         if (calibration <= 0f) return;
         float intensity = Mathf.Clamp01(Mathf.Max(0f, pressure) / calibration);
         if (intensity < Mathf.Clamp01(minimumEffectiveIntensity)) return;
         accumulatedDose = Mathf.Min(RequiredDose, accumulatedDose + intensity * deltaTime);
+        if (accumulatedDose >= RequiredDose * (1f - 0.000001f)) accumulatedDose = RequiredDose;
         TiltFire(pressure, calibration);
         int targetCount = Mathf.Min(candleFires.Length,
             Mathf.FloorToInt(DoseProgress * candleFires.Length + 0.00001f));
@@ -73,7 +76,11 @@ public class CandleControl2 : MonoBehaviour
             if (flames[index] != null) flames[index].ShrinkAndOff();
             else if (candleFires[index] != null) candleFires[index].gameObject.SetActive(false);
         }
-        if (candleFires.Length > 0 && extinguishedCount == candleFires.Length) CompleteInteraction();
+        if (DoseProgress >= 1f && candleFires.Length > 0 && extinguishedCount == candleFires.Length)
+        {
+            foreach (FireControl flame in flames) if (flame != null) flame.FinishExtinguishing();
+            CompleteInteraction();
+        }
     }
 
     private void TiltFire(float pressure, float reference)
@@ -88,7 +95,17 @@ public class CandleControl2 : MonoBehaviour
     public void CompleteInteraction()
     {
         EnsureInitialized();
-        if (IsCompleted) return;
+        if (IsCompleted || DoseProgress < 1f || candleFires.Length == 0 ||
+            extinguishedCount != candleFires.Length) return;
+        for (int i = 0; i < candleFires.Length; i++)
+        {
+            if (candleFires[i] == null) return;
+            if (flames[i] != null)
+            {
+                if (!flames[i].IsExtinguished) return;
+            }
+            else if (candleFires[i].gameObject.activeSelf) return;
+        }
         IsCompleted = true;
         if (outline != null) outline.enabled = false;
         foreach (Collider collider in selectionColliders) if (collider != null) collider.enabled = false;

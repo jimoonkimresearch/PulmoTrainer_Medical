@@ -4421,6 +4421,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetDose: 1
+  difficultyMultiplier: 1
 --- !u!1001 &489216202
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -8398,6 +8401,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetDose: 1
+  difficultyMultiplier: 1
 --- !u!4 &903076855 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2790699077211534923, guid: aa73a9d31dfd049a1b51552625c41a7f,
@@ -9516,6 +9522,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetDose: 1
+  difficultyMultiplier: 1
 --- !u!114 &1051652863
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10832,6 +10841,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetDose: 1
+  difficultyMultiplier: 1
 --- !u!1 &1197867716
 GameObject:
   m_ObjectHideFlags: 0
@@ -13262,6 +13274,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetDose: 1
+  difficultyMultiplier: 1
 --- !u!1 &1366044605
 GameObject:
   m_ObjectHideFlags: 0

@@ -132,6 +132,25 @@ public class CandleUIManager : MonoBehaviour
         showStarAnims[num - 1].gameObject.GetComponent<AudioSource>().Play();
     }
 
+    public void ShowCurrentCandleProgress(int count)
+    {
+        // Restore earned stars without replaying sound or the acquisition animation on reselection.
+        if (showStarAnims == null) return;
+        for (int i = 0; i < showStarAnims.Length; i++)
+        {
+            Animation star = showStarAnims[i];
+            if (star == null) continue;
+            bool visible = i < count;
+            star.gameObject.SetActive(visible);
+            if (!visible || star.clip == null) continue;
+            star.Play();
+            AnimationState state = star[star.clip.name];
+            if (state != null) state.normalizedTime = 1f;
+            star.Sample();
+            star.Stop();
+        }
+    }
+
     public void ResetUI()
     {
         StopAllCoroutines();

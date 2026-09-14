@@ -235,7 +235,6 @@ public class CandleGameManager2 : MonoBehaviour
                         soundManager.OnBreatheSound();
                         pressureLog?.logPressure("Exhale Start");
                     }
-                    vrUiManager.exHaleFill(sensorData);
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
                     pressureLog?.logPressure(sensorData.ToString());
                     clearTime += Time.deltaTime;
@@ -247,6 +246,7 @@ public class CandleGameManager2 : MonoBehaviour
                     }
                     int previousCount = activeCandle.ExtinguishedCount;
                     activeCandle.ProcessExhale(sensorData, Time.deltaTime);
+                    vrUiManager.SetExhaleProgress(activeCandle.DoseProgress);
                     int currentCount = activeCandle.ExtinguishedCount;
                     candleOffedOnThisStage += currentCount - previousCount;
                     if (candleView != null)
@@ -258,12 +258,11 @@ public class CandleGameManager2 : MonoBehaviour
                         ? neutralDuration + Time.deltaTime : 0f;
                     if (activeCandle.IsCompleted || neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds))
                     {
-                        activeCandle.CompleteInteraction();
+                        // A partial breath ends the attempt, not the group. Dose/flames/colliders stay owned by the candle.
+                        if (activeCandle.IsCompleted) blowedCandles++;
                         activeCandle = null;
-                        blowedCandles++;
                         ResetBreathState();
                         vrUiManager.resetFill();
-                        vrUiManager.ResetOutFill();
                         if (blowedCandles >= currStage)
                         {
                             yield return new WaitForSeconds(1f);
@@ -333,6 +332,8 @@ public class CandleGameManager2 : MonoBehaviour
         if (currState == GameState.INHALE || currState == GameState.EXHALE) return;
         CandleControl2 candidate = SelectedCandle();
         if (candidate == null || candidate.IsCompleted) return;
+        vrUiManager.SetExhaleProgress(candidate.DoseProgress);
+        if (candleView != null) candleView.ShowCurrentCandleProgress(candidate.ExtinguishedCount);
         currState = GameState.INHALEREADY;
     }
 

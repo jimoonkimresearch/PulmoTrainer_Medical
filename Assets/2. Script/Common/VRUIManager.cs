@@ -239,6 +239,12 @@ public class VRUIManager : MonoBehaviour
         exhaleFillGuage.fillAmount = 0f;
     }
 
+    public void SetExhaleProgress(float progress)
+    {
+        exhaleFillAmt = Mathf.Clamp01(progress);
+        if (exhaleFillGuage != null) exhaleFillGuage.fillAmount = exhaleFillAmt;
+    }
+
     /// <summary>
     /// 로켓발사 후 로켓 객체의 RocketBehavior 스크립트로부터 메시지 받아 흡기 Hud숨기기
     /// </summary>
