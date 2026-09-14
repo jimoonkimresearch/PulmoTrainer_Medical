@@ -31,7 +31,11 @@ public class BreathTestGameManager : MonoBehaviour
     private Logging pressureLog;
     [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
     [SerializeField, Min(0.01f)] private float breathEndHoldSeconds = 0.35f;
+    [SerializeField, Min(0.1f)] private float measurementTimeoutSeconds = 8f;
+    [SerializeField, Min(0.1f)] private float postBreathFlightTimeoutSeconds = 8f;
     private float neutralDuration;
+    private float postBreathFlightTime;
+    private bool measurementEnded;
     private float BreathStartThreshold => Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential));
 
     public float sensorData { get; set; }
@@ -272,41 +276,12 @@ public class BreathTestGameManager : MonoBehaviour
                         isExhaling = true;
                         pressureLog?.logPressure("Exhale Start");
                     }
-                    vrUiManager.exHaleFill(sensorData);
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
                     pressureLog?.logPressure(sensorData.ToString());
                     clearTime += Time.deltaTime;
-                    outtakeTime += Time.deltaTime;
-                    //vrUiManager.SetHeightProgress(balloonControl.GetComponent<Transform>().position.y);
-                    //Debug.Log(outtakeTime);
-                    if (outtakeTime < 1f)
-                    {
-                        maxFEV1Capacity[currStage] += sensorData;
-                        //soundManager.SendMessage("OnBreatheOutSound");
-                    }
-                    maxExhaleCapacity[currStage] += sensorData;
-                    // 호기 압력은 양수이므로 가장 큰 값이 최대 호기 압력이다.
-                    if (maxExhalePressure[currStage] < sensorData)
-                        maxExhalePressure[currStage] = sensorData;
-
-                    if (outtakeTime >= 1f && sensorData > gameManager.sensorActionPotential)
-                    {
-                        if (!isBalloonFlying)
-                        {
-                            isBalloonFlying = true;
-                            balloon.startLaunching();
-                            soundManager.StopMusic();
-                        }
-                        balloon.FvcOuttake(sensorData);
-                        //vrUiManager.HideExhaleHud();
-                        //vrUiManager.HideInhaleHud();
-                    }
-                    else if (outtakeTime < 1f)
-                    {
-                        balloon.Fev1Outtake(sensorData);
-                    }
-
-                    CheckExhaleEnd();
+                    if (!measurementEnded) UpdateExhaleMeasurement();
+                    else postBreathFlightTime += Time.deltaTime;
+                    CheckFlightEnd();
 
                     break;
 
@@ -325,8 +300,6 @@ public class BreathTestGameManager : MonoBehaviour
                         vrUiManager.HideInhaleHud();
                         soundManager.ScoreBoardSound();
                         pressureLog?.logClearTime(clearTime.ToString());
-                        if (currStage >= 0 && currStage < completedMeasurements.Length)
-                            completedMeasurements[currStage] = true;
                         currStage = currStage + 1;
                         //vrUiManager.SendMessage("ShowInhaleHud");
                         //Debug.Log("finish");
@@ -364,8 +337,9 @@ public class BreathTestGameManager : MonoBehaviour
 
     void InhaleFinished()
     {
+        if (measurementEnded || currState3 != TestGameState.INHALE) return;
         currState3 = TestGameState.EXHALE;
-        balloon.startLaunching();
+        StartBalloonFlight();
     }
 
     public void SensorStart()
@@ -377,20 +351,59 @@ public class BreathTestGameManager : MonoBehaviour
     public void toFinishState()
     {
         if (currState3 == TestGameState.FINISH) return;
+        if (currState3 == TestGameState.EXHALE) EndMeasurement();
         currState3 = BreathTestGameManager.TestGameState.FINISH;
         neutralDuration = 0f;
-        if (balloon != null) balloon.CompleteExhale();
+        if (balloon != null) balloon.CompleteFlight();
     }
 
-    private void CheckExhaleEnd()
+    private void UpdateExhaleMeasurement()
     {
-        if (currState3 != TestGameState.EXHALE) return;
+        // outtakeTime is measurement time only; post-breath flight has its own clock.
+        outtakeTime += Time.deltaTime;
+        vrUiManager.exHaleFill(sensorData);
+        if (outtakeTime < 1f) maxFEV1Capacity[currStage] += sensorData;
+        maxExhaleCapacity[currStage] += sensorData;
+        if (maxExhalePressure[currStage] < sensorData) maxExhalePressure[currStage] = sensorData;
+        balloon.SetFlightPressure(sensorData);
+        if (outtakeTime >= 1f && sensorData > gameManager.sensorActionPotential)
+        {
+            StartBalloonFlight();
+            balloon.FvcOuttake(sensorData);
+        }
+        else if (outtakeTime < 1f) balloon.Fev1Outtake(sensorData);
+
         float endThreshold = Mathf.Clamp(breathEndThreshold, 0f, BreathStartThreshold * 0.9f);
         neutralDuration = Mathf.Abs(sensorData) <= endThreshold
             ? neutralDuration + Time.deltaTime : 0f;
-        // Neutral release is the normal completion. Retain the existing flight/time limits as fallbacks.
         if (neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds) ||
-            outtakeTime >= 8f || balloon.HasReachedFlightLimit)
+            outtakeTime >= Mathf.Max(0.1f, measurementTimeoutSeconds)) EndMeasurement();
+    }
+
+    private void StartBalloonFlight()
+    {
+        if (isBalloonFlying) return;
+        isBalloonFlying = true;
+        balloon.startLaunching();
+        soundManager.StopMusic();
+    }
+
+    private void EndMeasurement()
+    {
+        if (measurementEnded) return;
+        measurementEnded = true;
+        postBreathFlightTime = 0f;
+        if (currStage >= 0 && currStage < completedMeasurements.Length)
+            completedMeasurements[currStage] = true;
+        StartBalloonFlight();
+        balloon.SealBreathInput();
+    }
+
+    private void CheckFlightEnd()
+    {
+        if (balloon.HasReachedFlightLimit ||
+            (measurementEnded && (postBreathFlightTime >= Mathf.Max(0.1f, postBreathFlightTimeoutSeconds) ||
+                !balloon.isActiveAndEnabled)))
             toFinishState();
     }
 
@@ -399,6 +412,7 @@ public class BreathTestGameManager : MonoBehaviour
         if (isResetting) return;
         isResetting = true;
         neutralDuration = 0f;
+        postBreathFlightTime = 0f;
         outtakeTime = 0f;
         finishTime = 0f;
         clearTime = 0f;
@@ -466,6 +480,8 @@ public class BreathTestGameManager : MonoBehaviour
         sensorData = 0f;
         prevSensorData = 0f;
         neutralDuration = 0f;
+        postBreathFlightTime = 0f;
+        measurementEnded = false;
         outtakeTime = 0f;
         intakeTime = 0f;
         clearTime = 0f;
