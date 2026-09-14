@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -67,12 +67,14 @@ public class CandleUIManager : MonoBehaviour
                 scoreText.text = ("촛불 " + (10 * currStage) + "개 중에 " + candleOffed + "개를 껐어요!"
                 + "\n다음엔 더 많이 끌수 있을까요?");
                 scoreTr.gameObject.SetActive(true);
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
                 soundManager.ScoreBoardSound();
             }
             else if (candleOffed >= (10 * currStage))
             {
                 scoreText.text = ("촛불을 모두 다 껐어요! 굉장해요!");
                 scoreTr.gameObject.SetActive(true);
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
                 //올클리어 이펙트
                 perfectEffect.Play();
                 soundManager.OnPerfectGame();
@@ -88,6 +90,7 @@ public class CandleUIManager : MonoBehaviour
         CancelInvoke();
         if (perfectEffect != null) perfectEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)
@@ -127,6 +130,25 @@ public class CandleUIManager : MonoBehaviour
         showStarAnims[num - 1].gameObject.SetActive(true);
         showStarAnims[num - 1].Play();
         showStarAnims[num - 1].gameObject.GetComponent<AudioSource>().Play();
+    }
+
+    public void ShowCurrentCandleProgress(int count)
+    {
+        // Restore earned stars without replaying sound or the acquisition animation on reselection.
+        if (showStarAnims == null) return;
+        for (int i = 0; i < showStarAnims.Length; i++)
+        {
+            Animation star = showStarAnims[i];
+            if (star == null) continue;
+            bool visible = i < count;
+            star.gameObject.SetActive(visible);
+            if (!visible || star.clip == null) continue;
+            star.Play();
+            AnimationState state = star[star.clip.name];
+            if (state != null) state.normalizedTime = 1f;
+            star.Sample();
+            star.Stop();
+        }
     }
 
     public void ResetUI()

@@ -209,7 +209,7 @@ public class RocketGameManager : MonoBehaviour
                     clearTime += Time.deltaTime;
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
 
-                    if (sensorData <= gameManager.sensorActionPotential * -1f && (sensorData - prevSensorData) <= -2f)
+                    if (sensorData <= -Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential)))
                     {
                         currState = RocketState.INHALE;
                         //BluetoothManager.instance.checkingBLE = false;
@@ -234,7 +234,7 @@ public class RocketGameManager : MonoBehaviour
                     vrUiManager.inHaleFill(sensorData);
                     rocket.Intake(sensorData);
 
-                    if (sensorData > gameManager.sensorActionPotential && (sensorData - prevSensorData) >= 2f)
+                    if (sensorData >= Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential)))
                     {
                         currState = RocketState.EXHALE;
                     }

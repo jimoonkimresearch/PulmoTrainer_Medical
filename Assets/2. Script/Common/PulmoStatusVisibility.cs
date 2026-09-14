@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System;
 using UnityEngine;
 using PulmoTrainer.Bluetooth;
 
@@ -8,27 +8,30 @@ namespace PulmoTrainer.UI
     [DisallowMultipleComponent]
     public sealed class PulmoStatusVisibility : MonoBehaviour
     {
+        [Flags]
+        public enum Blocker { None = 0, Guide = 1, Score = 2, EyeBlocker = 4 }
+
         private PulmoBluetoothStatusView view;
-        private readonly List<GameObject> blockingPanels = new List<GameObject>();
-        public void Configure(PulmoBluetoothStatusView statusView, IEnumerable<GameObject> panels)
+        private Blocker blockers;
+
+        public void ResetForScene(PulmoBluetoothStatusView statusView)
         {
             view = statusView;
-            blockingPanels.Clear();
-            foreach (GameObject panel in panels)
-                if (panel != null && !blockingPanels.Contains(panel)) blockingPanels.Add(panel);
+            blockers = Blocker.None;
             Refresh();
         }
-        private void LateUpdate() { Refresh(); }
+
+        public void SetBlocked(Blocker blocker, bool blocked)
+        {
+            Blocker next = blocked ? blockers | blocker : blockers & ~blocker;
+            if (next == blockers) return;
+            blockers = next;
+            Refresh();
+        }
+
         private void Refresh()
         {
-            if (view == null) return;
-            foreach (GameObject panel in blockingPanels)
-                if (panel != null && panel.activeInHierarchy)
-                {
-                    view.SetVisible(false);
-                    return;
-                }
-            view.SetVisible(true);
+            if (view != null) view.SetVisible(blockers == Blocker.None);
         }
     }
 }

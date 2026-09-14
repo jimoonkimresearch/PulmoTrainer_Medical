@@ -1,8 +1,8 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using PulmoTrainer.UI;
 
 public class VRUIManager : MonoBehaviour
 {
@@ -21,6 +21,8 @@ public class VRUIManager : MonoBehaviour
     public GameObject exhaleBarObj;
 
     private GameManager gameManager = null;
+    private PulmoStatusVisibility statusVisibility;
+    private Coroutine eyeFade;
 
     public Transform playerTr = null;
 
@@ -57,11 +59,18 @@ public class VRUIManager : MonoBehaviour
         else
         {
             Destroy(this);
+            return;
         }
 
         gameManager = GameManager.instance;
 
-        //rocketGuidePanels = new GameObject[5];
+        ConfigureStatusVisibility();
+        ResetGuides();
+        if (eyeBlocker != null)
+        {
+            eyeBlocker.color = new Color(0f, 0f, 0f, 0f);
+            eyeBlocker.gameObject.SetActive(false);
+        }
     }
 
     //개체 사용되도록 설정됐을 때
@@ -105,7 +114,6 @@ public class VRUIManager : MonoBehaviour
 
     private void Start()
     {
-        ConfigureStatusVisibility();
         // Bind presentation first: an absent optional gauge must not stop head tracking.
         Camera viewCamera = playerTr != null ? playerTr.GetComponent<Camera>() : null;
         if (viewCamera == null) viewCamera = Camera.main;
@@ -146,29 +154,19 @@ public class VRUIManager : MonoBehaviour
             break;
         }
         if (view == null) return;
-        var panels = new List<GameObject>();
-        AddPanels(panels, rocketStartGuidePanels);
-        AddPanels(panels, rocketGuidePanels);
-        AddPanels(panels, candleStartGuidePanels);
-        AddPanels(panels, inhaleStartGuidePanels);
-        AddPanels(panels, tutoStartGuidePanels);
-        AddPanels(panels, testStartGuidePanels);
-        panels.Add(candleGuidePanel);
-        panels.Add(inhaleGuidePanel);
-        panels.Add(testGuidePanel);
-        if (eyeBlocker != null) panels.Add(eyeBlocker.gameObject);
-        // Cache scene result panels once, including initially inactive scoreboards.
-        foreach (GameObject root in gameObject.scene.GetRootGameObjects())
-            foreach (Transform item in root.GetComponentsInChildren<Transform>(true))
-                if (item.name == "Scoreboard") panels.Add(item.gameObject);
-        var visibility = GetComponent<PulmoTrainer.UI.PulmoStatusVisibility>();
-        if (visibility == null) visibility = gameObject.AddComponent<PulmoTrainer.UI.PulmoStatusVisibility>();
-        visibility.Configure(view, panels);
+        statusVisibility = GetComponent<PulmoStatusVisibility>();
+        if (statusVisibility == null) statusVisibility = gameObject.AddComponent<PulmoStatusVisibility>();
+        statusVisibility.ResetForScene(view);
     }
 
-    private static void AddPanels(List<GameObject> destination, GameObject[] panels)
+    public void SetScoreVisible(bool visible)
     {
-        if (panels != null) destination.AddRange(panels);
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.Score, visible);
+    }
+
+    private void SetStatusBlocked(PulmoStatusVisibility.Blocker blocker, bool blocked)
+    {
+        if (statusVisibility != null) statusVisibility.SetBlocked(blocker, blocked);
     }
 
     private void BindHudCanvas(RectTransform hud, Camera viewCamera, Vector3 cameraOffset)
@@ -241,6 +239,12 @@ public class VRUIManager : MonoBehaviour
         exhaleFillGuage.fillAmount = 0f;
     }
 
+    public void SetExhaleProgress(float progress)
+    {
+        exhaleFillAmt = Mathf.Clamp01(progress);
+        if (exhaleFillGuage != null) exhaleFillGuage.fillAmount = exhaleFillAmt;
+    }
+
     /// <summary>
     /// 로켓발사 후 로켓 객체의 RocketBehavior 스크립트로부터 메시지 받아 흡기 Hud숨기기
     /// </summary>
@@ -266,183 +270,115 @@ public class VRUIManager : MonoBehaviour
 
     public void BlockEye()
     {
-        StartCoroutine(blockEye());
-    }
-
-    IEnumerator blockEye()
-    {
+        if (eyeBlocker == null) return;
+        if (eyeFade != null) { StopCoroutine(eyeFade); eyeFade = null; }
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.EyeBlocker, true);
         eyeBlocker.gameObject.SetActive(true);
         eyeBlocker.color = new Color(0f, 0f, 0f, 1f);
-        fillGuage.fillAmount = 0f;
-        fillAmt = 0f;
-        inhaled = 0f;
-        yield return new WaitForSeconds(0.3f);
+        resetFill();
     }
 
     public void UnBlockEye()
     {
-        StartCoroutine(unBlockEye());
+        if (eyeBlocker == null) return;
+        if (eyeFade != null) StopCoroutine(eyeFade);
+        eyeFade = StartCoroutine(FadeEyeBlocker());
     }
 
-    IEnumerator unBlockEye()
+    private IEnumerator FadeEyeBlocker()
     {
-        float blockerAlpha = eyeBlocker.color.a;
-        while (blockerAlpha >= 0)
+        float alpha = eyeBlocker.color.a;
+        while (alpha > 0f)
         {
-            blockerAlpha -= 1 / 60f;
-            eyeBlocker.color = new Color(0f, 0f, 0f, blockerAlpha);
-            yield return new WaitForSeconds(1 / 60f);
+            alpha = Mathf.Max(0f, alpha - Time.deltaTime);
+            eyeBlocker.color = new Color(0f, 0f, 0f, alpha);
+            yield return null;
         }
         eyeBlocker.gameObject.SetActive(false);
-        yield return new WaitForSeconds(0.3f);
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.EyeBlocker, false);
+        eyeFade = null;
+    }
+
+    private static void HidePanels(GameObject[] panels)
+    {
+        if (panels == null) return;
+        foreach (GameObject panel in panels) if (panel != null) panel.SetActive(false);
+    }
+
+    private void ResetGuides()
+    {
+        HidePanels(rocketStartGuidePanels);
+        HidePanels(rocketGuidePanels);
+        HidePanels(candleStartGuidePanels);
+        HidePanels(inhaleStartGuidePanels);
+        HidePanels(tutoStartGuidePanels);
+        HidePanels(testStartGuidePanels);
+        if (candleGuidePanel != null) candleGuidePanel.SetActive(false);
+        if (inhaleGuidePanel != null) inhaleGuidePanel.SetActive(false);
+        if (testGuidePanel != null) testGuidePanel.SetActive(false);
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.Guide, false);
+    }
+
+    private void SetGuideVisible(GameObject panel, bool visible)
+    {
+        if (panel == null) return;
+        panel.SetActive(visible);
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.Guide, visible);
+    }
+
+    private void ShowStartGuide(GameObject[] panels, int index, bool playAudio = true)
+    {
+        if (panels == null || index < 0 || index >= panels.Length || panels[index] == null) return;
+        HidePanels(panels);
+        SetGuideVisible(panels[index], true);
+        AudioSource audio = panels[index].GetComponent<AudioSource>();
+        if (playAudio && audio != null) audio.Play();
+    }
+
+    private void HideStartGuide(GameObject[] panels)
+    {
+        HidePanels(panels);
+        SetStatusBlocked(PulmoStatusVisibility.Blocker.Guide, false);
     }
 
     public void HideAllRocketGuides()
     {
-        if (rocketStartGuidePanels != null)
-            foreach (GameObject panel in rocketStartGuidePanels) if (panel != null) panel.SetActive(false);
-        if (rocketGuidePanels != null)
-            foreach (GameObject panel in rocketGuidePanels) if (panel != null) panel.SetActive(false);
+        HidePanels(rocketStartGuidePanels);
+        HideStartGuide(rocketGuidePanels);
     }
 
-    public void ShowRocketStartGuide(int guideNum)
-    {
-        if(guideNum > 0)
-        {
-            rocketStartGuidePanels[guideNum-1].SetActive(false);
-        }
-
-        rocketStartGuidePanels[guideNum].SetActive(true);
-        rocketStartGuidePanels[guideNum].GetComponent<AudioSource>().Play();
-    }
-
-    public void HideRocketStartGuide(int guideNum)
-    {
-        rocketStartGuidePanels[guideNum - 1].SetActive(false);
-
-    }
+    public void ShowRocketStartGuide(int guideNum) => ShowStartGuide(rocketStartGuidePanels, guideNum);
+    public void HideRocketStartGuide(int guideNum) => HideStartGuide(rocketStartGuidePanels);
 
     public void ShowGuide(int currStage)
     {
-        if (currStage == 1)
-        {
-            ShowRocketStartGuide(0);
-        }
-        else
-        {
-            rocketGuidePanels[currStage - 1].SetActive(true);
-        }
+        if (currStage == 1) ShowRocketStartGuide(0);
+        else ShowStartGuide(rocketGuidePanels, currStage - 1, false);
     }
 
-    
-
-    public void HideGuide(int currStage)
-    {
-        rocketGuidePanels[currStage - 1].SetActive(false);
-    }
-
-    public void ShowCandleStartGuide(int guideNum)
-    {
-        if (guideNum > 0)
-        {
-            candleStartGuidePanels[guideNum - 1].SetActive(false);
-        }
-        candleStartGuidePanels[guideNum].SetActive(true);
-        candleStartGuidePanels[guideNum].GetComponent<AudioSource>().Play();
-    }
-
-    public void HideCandleStartGuide(int guideNum)
-    {
-        candleStartGuidePanels[guideNum - 1].SetActive(false);
-
-    }
+    public void HideGuide(int currStage) => HideStartGuide(rocketGuidePanels);
+    public void ShowCandleStartGuide(int guideNum) => ShowStartGuide(candleStartGuidePanels, guideNum);
+    public void HideCandleStartGuide(int guideNum) => HideStartGuide(candleStartGuidePanels);
 
     public void ShowCandleGuide(int currStage)
     {
-        if (currStage == 1)
-        {
-            ShowCandleStartGuide(0);
-        }
-        else
-        {
-            candleGuidePanel.SetActive(true);
-        }
+        if (currStage == 1) ShowCandleStartGuide(0);
+        else SetGuideVisible(candleGuidePanel, true);
     }
 
-    public void HideCandleGuide()
-    {
-        candleGuidePanel.SetActive(false);
-    }
-
-    public void ShowInhaleStartGuide(int guideNum)
-    {
-        if (guideNum > 0)
-        {
-            inhaleStartGuidePanels[guideNum - 1].SetActive(false);
-        }
-        inhaleStartGuidePanels[guideNum].SetActive(true);
-        inhaleStartGuidePanels[guideNum].GetComponent<AudioSource>().Play();
-    }
-
-    public void HideInhaleStartGuide(int guideNum)
-    {
-        inhaleStartGuidePanels[guideNum - 1].SetActive(false);
-
-    }
+    public void HideCandleGuide() => SetGuideVisible(candleGuidePanel, false);
+    public void ShowInhaleStartGuide(int guideNum) => ShowStartGuide(inhaleStartGuidePanels, guideNum);
+    public void HideInhaleStartGuide(int guideNum) => HideStartGuide(inhaleStartGuidePanels);
 
     public void ShowInhaleGuide(int currStage)
     {
-        if (currStage == 1)
-        {
-            ShowInhaleStartGuide(0);
-        }
-        else
-        {
-            inhaleGuidePanel.SetActive(true);
-        }
+        if (currStage == 1) ShowInhaleStartGuide(0);
+        else SetGuideVisible(inhaleGuidePanel, true);
     }
 
-    public void HideInhaleGuide()
-    {
-        inhaleGuidePanel.SetActive(false);
-    }
-
-    public void ShowTutoStartGuide(int guideNum)
-    {
-        if (guideNum > 0)
-        {
-            tutoStartGuidePanels[guideNum - 1].SetActive(false);
-        }
-        tutoStartGuidePanels[guideNum].SetActive(true);
-        tutoStartGuidePanels[guideNum].GetComponent<AudioSource>().Play();
-    }
-
-    public void HideTutoStartGuide(int guideNum)
-    {
-        tutoStartGuidePanels[guideNum - 1].SetActive(false);
-    }
-
-    public void ShowTestStartGuide(int guideNum)
-    {
-        if (guideNum >= 1 && guideNum < 5)
-        {
-            testStartGuidePanels[guideNum - 1].SetActive(false);
-            testStartGuidePanels[guideNum].SetActive(true);
-        }
-        else if(guideNum== 0)
-        {
-            testStartGuidePanels[guideNum].SetActive(true);
-        }
-        else
-        {
-            Debug.Log("GuideNum error: " + guideNum);
-        }
-        
-    }
-
-    public void HideTestGuide(int guideNum)
-    {
-        tutoStartGuidePanels[guideNum - 1].SetActive(false);
-    }
-
+    public void HideInhaleGuide() => SetGuideVisible(inhaleGuidePanel, false);
+    public void ShowTutoStartGuide(int guideNum) => ShowStartGuide(tutoStartGuidePanels, guideNum);
+    public void HideTutoStartGuide(int guideNum) => HideStartGuide(tutoStartGuidePanels);
+    public void ShowTestStartGuide(int guideNum) => ShowStartGuide(testStartGuidePanels, guideNum, false);
+    public void HideTestGuide(int guideNum) => HideStartGuide(testStartGuidePanels);
 }
