@@ -47,6 +47,8 @@ public class Balloon : MonoBehaviour
     private bool exhaleScaleCaptured;
     private bool isFlying;
     private bool isFinishing;
+    private BreathTestUIManager view;
+    public bool HasReachedFlightLimit => transform.localPosition.y >= maxAltitude;
 
     private void Awake()
     {
@@ -64,6 +66,7 @@ public class Balloon : MonoBehaviour
         thisTr = transform;
         thisRb = GetComponent<Rigidbody>();
         balloonSoundSource = GetComponent<AudioSource>();
+        view = UIManager != null ? UIManager.GetComponent<BreathTestUIManager>() : null;
         initialLocalPosition = thisTr.localPosition;
         initialLocalRotation = thisTr.localRotation;
         initialLocalScale = thisTr.localScale;
@@ -107,7 +110,7 @@ public class Balloon : MonoBehaviour
     {
         ResolveManagers();
         if (testGameManager != null && !isFinishing)
-            testGameManager.currState3 = BreathTestGameManager.TestGameState.INHALE;
+            testGameManager.SensorStart();
     }
 
     public void ReadyForLaunch()
@@ -192,24 +195,21 @@ public class Balloon : MonoBehaviour
         thisRb.MovePosition(thisRb.position + worldDelta);
     }
 
-    public void CheckExhaleEnd()
+    public void CompleteExhale()
     {
-        if (isFinishing || testGameManager == null) return;
-        if (thisTr.localPosition.y >= maxAltitude || testGameManager.outtakeTime >= 8f)
-        {
-            isFinishing = true;
-            isFlying = false;
-            currentRiseSpeed = 0f;
-            testGameManager.toFinishState();
-            StartCoroutine(FinishBalloon());
-        }
+        EnsureInitialized();
+        if (isFinishing) return;
+        isFinishing = true;
+        isFlying = false;
+        currentRiseSpeed = 0f;
+        StartCoroutine(FinishBalloon());
     }
 
     private IEnumerator FinishBalloon()
     {
         StopEffect(boostEffect);
         if (balloonSoundSource != null) balloonSoundSource.Stop();
-        if (UIManager != null) UIManager.SendMessage("ScoreUI", thisTr.position.y);
+        if (view != null) view.ScoreUI();
         PlayEffect(endEffect);
         yield return new WaitForSeconds(Mathf.Max(0f, finishEffectSeconds));
         StopEffect(endEffect);

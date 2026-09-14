@@ -29,6 +29,10 @@ public class BreathTestGameManager : MonoBehaviour
     private Balloon balloon;
     private BreathTestUIManager testView;
     private Logging pressureLog;
+    [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
+    [SerializeField, Min(0.01f)] private float breathEndHoldSeconds = 0.35f;
+    private float neutralDuration;
+    private float BreathStartThreshold => Mathf.Max(0.01f, Mathf.Abs(gameManager.sensorActionPotential));
 
     public float sensorData { get; set; }
     public void SetsensorData(float value)
@@ -213,7 +217,7 @@ public class BreathTestGameManager : MonoBehaviour
                     clearTime += Time.deltaTime;
                     rayCastCam.GetComponent<CamRayCast>().messageSended = false;
                     //Debug.Log(sensorData);
-                    if (sensorData <= gameManager.sensorActionPotential * -1f && (sensorData - prevSensorData) <= -2f)
+                    if (sensorData <= -BreathStartThreshold)
                     {
                         currState3 = TestGameState.INHALE;
                         //BluetoothManager.instance.checkingBLE = false;
@@ -251,8 +255,9 @@ public class BreathTestGameManager : MonoBehaviour
                     balloon.Intake(sensorData);
 
 
-                    if (sensorData > gameManager.sensorActionPotential && (sensorData - prevSensorData) >= 2f)
+                    if (sensorData >= BreathStartThreshold)
                     {
+                        neutralDuration = 0f;
                         currState3 = TestGameState.EXHALE;
                     }
                     prevSensorData = sensorData;
@@ -301,7 +306,7 @@ public class BreathTestGameManager : MonoBehaviour
                         balloon.Fev1Outtake(sensorData);
                     }
 
-                    balloon.CheckExhaleEnd();
+                    CheckExhaleEnd();
 
                     break;
 
@@ -365,18 +370,35 @@ public class BreathTestGameManager : MonoBehaviour
 
     public void SensorStart()
     {
-        balloon.InHaleStart();
+        if (currState3 == TestGameState.INHALEREADY)
+            currState3 = TestGameState.INHALE;
     }
 
     public void toFinishState()
     {
+        if (currState3 == TestGameState.FINISH) return;
         currState3 = BreathTestGameManager.TestGameState.FINISH;
+        neutralDuration = 0f;
+        if (balloon != null) balloon.CompleteExhale();
+    }
+
+    private void CheckExhaleEnd()
+    {
+        if (currState3 != TestGameState.EXHALE) return;
+        float endThreshold = Mathf.Clamp(breathEndThreshold, 0f, BreathStartThreshold * 0.9f);
+        neutralDuration = Mathf.Abs(sensorData) <= endThreshold
+            ? neutralDuration + Time.deltaTime : 0f;
+        // Neutral release is the normal completion. Retain the existing flight/time limits as fallbacks.
+        if (neutralDuration >= Mathf.Max(0.01f, breathEndHoldSeconds) ||
+            outtakeTime >= 8f || balloon.HasReachedFlightLimit)
+            toFinishState();
     }
 
     private void resetStage()
     {
         if (isResetting) return;
         isResetting = true;
+        neutralDuration = 0f;
         outtakeTime = 0f;
         finishTime = 0f;
         clearTime = 0f;
@@ -443,6 +465,7 @@ public class BreathTestGameManager : MonoBehaviour
         soundManager.GetComponent<BreathTestSoundManager>().PlayMusic();
         sensorData = 0f;
         prevSensorData = 0f;
+        neutralDuration = 0f;
         outtakeTime = 0f;
         intakeTime = 0f;
         clearTime = 0f;
