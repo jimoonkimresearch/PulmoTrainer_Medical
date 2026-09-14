@@ -27,6 +27,8 @@ public class RocketBehavior2 : MonoBehaviour
     [SerializeField, Min(0.01f)] private float riseResponseSeconds = 0.315f;
     [Tooltip("Seconds to close 95% of a decrease in target speed while blowing.")]
     [SerializeField, Min(0.01f)] private float releaseResponseSeconds = 0.6f;
+    [Tooltip("Existing height-budget approach time while blowing; not a finish/settle hold.")]
+    [SerializeField, Min(0.01f)] private float arrivalResponseSeconds = 0.4f;
     [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
     [Tooltip("Continuous neutral confirmation before locking this stage's single breath.")]
     [SerializeField, Min(0.01f)] private float inputLockNeutralSeconds = 0.12f;
@@ -40,6 +42,7 @@ public class RocketBehavior2 : MonoBehaviour
     private bool initialized;
     private bool launchStarted;
     private bool inputLocked;
+    private bool neutralInput;
     private bool finishStarted;
     private float totalInhale;
     private float totalExhale;
@@ -132,9 +135,9 @@ public class RocketBehavior2 : MonoBehaviour
         if (exhaleSeconds < 1f) totalFev1 += sample;
         SetText(fev1Input, totalFev1);
         SetText(fvcInput, totalExhale);
-        bool neutral = Mathf.Abs(pressure) <= Mathf.Max(0f, breathEndThreshold);
-        neutralSeconds = neutral ? neutralSeconds + deltaTime : 0f;
-        if (!neutral)
+        neutralInput = Mathf.Abs(pressure) <= Mathf.Max(0f, breathEndThreshold);
+        neutralSeconds = neutralInput ? neutralSeconds + deltaTime : 0f;
+        if (!neutralInput)
         {
             float intensity = gameManager != null && gameManager.maxExhalePressure > 0f
                 ? Mathf.Clamp01(sample / gameManager.maxExhalePressure) : 0f;
@@ -175,7 +178,13 @@ public class RocketBehavior2 : MonoBehaviour
         else
         {
             float goal = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
-            // Performance limits scored travel, not the intensity-driven velocity response.
+            // Preserve the pre-existing active-breath budget limiter. Only the rise response is faster.
+            if (!neutralInput)
+            {
+                float remaining = Mathf.Max(0f, goal - flightHeight);
+                currentRiseSpeed = Mathf.Min(currentRiseSpeed,
+                    remaining / Mathf.Max(deltaTime, arrivalResponseSeconds));
+            }
             flightHeight = Mathf.Min(goal, flightHeight + currentRiseSpeed * deltaTime);
         }
         deformation.RestoreDuringFlight(deltaTime);
@@ -230,7 +239,7 @@ public class RocketBehavior2 : MonoBehaviour
         exhaleSeconds = neutralSeconds = currentRiseSpeed = 0f;
         flightHeight = initialPosition.y;
         finalGoalHeight = initialPosition.y;
-        launchStarted = inputLocked = finishStarted = false;
+        launchStarted = inputLocked = finishStarted = neutralInput = false;
         SetText(IntakeInput, 0f);
         SetText(fev1Input, 0f);
         SetText(fvcInput, 0f);

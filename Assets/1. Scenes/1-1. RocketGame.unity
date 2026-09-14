@@ -10455,6 +10455,7 @@ MonoBehaviour:
   maxRiseSpeed: 200
   riseResponseSeconds: 0.315
   releaseResponseSeconds: 0.6
+  arrivalResponseSeconds: 0.4
   breathEndThreshold: 0.2
   inputLockNeutralSeconds: 0.12
   postFinishRiseSpeed: 5
