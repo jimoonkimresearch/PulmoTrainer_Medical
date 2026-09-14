@@ -5833,7 +5833,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37d357eea1852b545ab624b4ff0ce4d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  isSimulatingOnEditor: 0
+  isSimulatingOnEditor: 1
   bluetoothManagerObject: {fileID: 0}
   targetGameManager: {fileID: 0}
   exhaleKey: 273
@@ -7649,7 +7649,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 975487460}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -395, y: 222.5, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -7657,7 +7657,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.105, y: 0.945}
   m_AnchorMax: {x: 0.105, y: 0.945}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: -456, y: 247}
   m_SizeDelta: {x: 190, y: 45}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &975487462
@@ -12861,6 +12861,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currState3: 0
   outtakeTime: 0
+  breathEndThreshold: 0.2
+  breathEndHoldSeconds: 0.35
   prevSensorData: 0
   isGuiding: 0
   inhaleReady: 0
