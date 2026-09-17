@@ -8650,8 +8650,7 @@ MonoBehaviour:
   arrivalResponseSeconds: 0.4
   breathEndThreshold: 0.2
   inputLockNeutralSeconds: 0.12
-  postFinishRiseSpeed: 5
-  postFinishDeceleration: 60
+  postFinishRiseSpeed: 1
 --- !u!114 &1108781264
 MonoBehaviour:
   m_ObjectHideFlags: 0
