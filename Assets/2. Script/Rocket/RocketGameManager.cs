@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
 
-public class RocketGameManager : MonoBehaviour
+public class RocketGameManager : MonoBehaviour, PulmoTrainer.Inputs.IBreathPressureReceiver
 {
     public float outtakeTime = 0f;
     private float intakeTime = 0f;
@@ -13,6 +13,8 @@ public class RocketGameManager : MonoBehaviour
     {
         sensorData = value;
     }
+
+    void PulmoTrainer.Inputs.IBreathPressureReceiver.SetPressure(float pressure) => SetsensorData(pressure);
 
     public float prevSensorData = 0;
 
