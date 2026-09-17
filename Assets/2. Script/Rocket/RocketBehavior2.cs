@@ -32,9 +32,8 @@ public class RocketBehavior2 : MonoBehaviour
     [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
     [Tooltip("Continuous neutral confirmation before locking this stage's single breath.")]
     [SerializeField, Min(0.01f)] private float inputLockNeutralSeconds = 0.12f;
-    [Tooltip("Visual-only upward speed after the score and player position are fixed.")]
-    [SerializeField, Min(0.01f)] private float postFinishRiseSpeed = 5f;
-    [SerializeField, Min(0.01f)] private float postFinishDeceleration = 60f;
+    [Tooltip("Constant visual-only drift after reaching the score height, in world units per second.")]
+    [SerializeField, Min(0.01f)] private float postFinishRiseSpeed = 1f;
     private const float ArrivalEpsilon = 0.001f;
     private Vector3 initialPosition;
     private Quaternion initialRotation;
@@ -165,15 +164,12 @@ public class RocketBehavior2 : MonoBehaviour
         Vector3 next = rocketRb != null ? rocketRb.position : rocketTr.position;
         if (finishStarted)
         {
-            currentRiseSpeed = Mathf.MoveTowards(currentRiseSpeed, Mathf.Max(0.01f, postFinishRiseSpeed),
-                Mathf.Max(0.01f, postFinishDeceleration) * deltaTime);
+            currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
             flightHeight += currentRiseSpeed * deltaTime;
         }
         else if (inputLocked)
         {
-            // Cross the score height without stopping at it while interpolation catches up.
-            // The goal is frozen; this travel cannot add score or breath performance.
-            flightHeight += currentRiseSpeed * deltaTime;
+            AdvanceLockedFlight(deltaTime);
         }
         else
         {
@@ -193,6 +189,28 @@ public class RocketBehavior2 : MonoBehaviour
         else rocketTr.position = next;
     }
 
+    private void AdvanceLockedFlight(float deltaTime)
+    {
+        float remaining = Mathf.Max(0f, finalGoalHeight - flightHeight);
+        float travel = currentRiseSpeed * deltaTime;
+        if (travel < remaining)
+        {
+            flightHeight += travel;
+            return;
+        }
+
+        // Split the crossing step: earned flight up to the score height, slow drift after it.
+        // Switching here prevents high-speed MovePosition steps queuing up while LateUpdate
+        // waits for the interpolated pose. Never overwrite the displayed Transform to finish.
+        if (remaining > 0f)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime - remaining / currentRiseSpeed);
+            flightHeight += remaining;
+        }
+        currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
+        flightHeight += currentRiseSpeed * deltaTime;
+    }
+
     private void LateUpdate()
     {
         if (!inputLocked || finishStarted) return;
@@ -206,6 +224,8 @@ public class RocketBehavior2 : MonoBehaviour
     {
         if (finishStarted) return;
         finishStarted = true;
+        if (rocketRb != null) rocketRb.useGravity = false;
+        currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
         if (playerCtrl != null) playerCtrl.EndFollowing();
         if (effects != null) effects.ResetEffects();
         SetEffect(boostEffect, false);

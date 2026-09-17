@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class CandleControl2 : MonoBehaviour
 {
@@ -8,10 +9,12 @@ public class CandleControl2 : MonoBehaviour
     [SerializeField] private float tiltRatio = 300f;
     [SerializeField, HideInInspector] private float airPerOffcandle = 220f;
     [SerializeField, Range(0f, 1f)] private float minimumEffectiveIntensity = 0f;
-    [Tooltip("Usability-test dose; tune in the Inspector after the pilot.")]
-    [SerializeField, Min(0.01f)] private float targetDose = 1f;
+    [Tooltip("1 matches the BreathTest/tutorial Exhaled air target: the calibrated mean FEV1 amount.")]
+    [FormerlySerializedAs("targetDose")]
+    [SerializeField, Min(0.01f)] private float targetExhaledAirRatio = 1f;
     [SerializeField, Min(0.01f)] private float difficultyMultiplier = 1f;
-    private float accumulatedDose;
+    private float accumulatedExhaledAir;
+    private float requiredExhaledAir;
     private int extinguishedCount;
     private Collider[] selectionColliders;
     private bool[] colliderEnabled;
@@ -25,8 +28,8 @@ public class CandleControl2 : MonoBehaviour
         extinguishedCount >= candleFires.Length;
     public int ExtinguishedCount => extinguishedCount;
     public int candlesForOff => extinguishedCount;
-    public float DoseProgress => Mathf.Clamp01(accumulatedDose / RequiredDose);
-    private float RequiredDose => Mathf.Max(0.01f, targetDose) * Mathf.Max(0.01f, difficultyMultiplier);
+    public float DoseProgress => requiredExhaledAir > 0f
+        ? Mathf.Clamp01(accumulatedExhaledAir / requiredExhaledAir) : 0f;
 
     private void Awake() { EnsureInitialized(); }
     private void EnsureInitialized()
@@ -63,13 +66,23 @@ public class CandleControl2 : MonoBehaviour
         if (IsAttemptFinished || !isActiveAndEnabled || GameManager.instance == null ||
             deltaTime <= 0f || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) ||
             float.IsNaN(pressure) || float.IsInfinity(pressure)) return;
-        float calibration = GameManager.instance.maxExhalePressure;
-        if (calibration <= 0f) return;
-        float intensity = Mathf.Clamp01(Mathf.Max(0f, pressure) / calibration);
+        if (requiredExhaledAir <= 0f)
+        {
+            float reference = GameManager.instance.maxFev1;
+            if (reference <= 0f || float.IsNaN(reference) || float.IsInfinity(reference)) return;
+            requiredExhaledAir = reference * Mathf.Max(0.01f, targetExhaledAirRatio)
+                * Mathf.Max(0.01f, difficultyMultiplier);
+        }
+        float sample = Mathf.Max(0f, pressure);
+        float peakPressure = GameManager.instance.maxExhalePressure;
+        float intensity = peakPressure > 0f ? Mathf.Clamp01(sample / peakPressure) : 0f;
         if (intensity < Mathf.Clamp01(minimumEffectiveIntensity)) return;
-        accumulatedDose = Mathf.Min(RequiredDose, accumulatedDose + intensity * deltaTime);
-        if (accumulatedDose >= RequiredDose * (1f - 0.000001f)) accumulatedDose = RequiredDose;
-        TiltFire(pressure, calibration);
+        // Use the same positive per-frame sensor sum as BreathTest and VRUIManager.exHaleFill.
+        // Do not normalize by peak pressure or multiply by time: those are different units.
+        accumulatedExhaledAir = Mathf.Min(requiredExhaledAir, accumulatedExhaledAir + sample);
+        if (accumulatedExhaledAir >= requiredExhaledAir * (1f - 0.000001f))
+            accumulatedExhaledAir = requiredExhaledAir;
+        TiltFire(pressure, peakPressure);
         int targetCount = Mathf.Min(candleFires.Length,
             Mathf.FloorToInt(DoseProgress * candleFires.Length + 0.00001f));
         while (extinguishedCount < targetCount)
@@ -104,7 +117,7 @@ public class CandleControl2 : MonoBehaviour
     {
         EnsureInitialized();
         if (IsAttemptFinished) return;
-        // Partial and full attempts both lock this set, preserving its earned dose and flames.
+        // Partial and full attempts both lock this set, preserving its earned air amount and flames.
         IsAttemptFinished = true;
         SetHighlighted(false);
         foreach (Collider collider in selectionColliders) if (collider != null) collider.enabled = false;
@@ -115,7 +128,7 @@ public class CandleControl2 : MonoBehaviour
         EnsureInitialized();
         StopAllCoroutines();
         CancelInvoke();
-        accumulatedDose = 0f;
+        accumulatedExhaledAir = requiredExhaledAir = 0f;
         extinguishedCount = 0;
         IsAttemptFinished = false;
         if (outline != null) outline.enabled = false;
