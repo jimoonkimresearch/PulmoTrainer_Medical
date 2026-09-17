@@ -5833,8 +5833,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37d357eea1852b545ab624b4ff0ce4d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  isSimulatingOnEditor: 0
-  bluetoothManagerObject: {fileID: 0}
+  isSimulatingOnEditor: 1
   targetGameManager: {fileID: 0}
   exhaleKey: 273
   inhaleKey: 274
