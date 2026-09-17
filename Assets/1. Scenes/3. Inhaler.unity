@@ -1191,7 +1191,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &78783309
 Canvas:
   m_ObjectHideFlags: 0
@@ -6971,8 +6971,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 541059493}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.19883, y: -2.42624, z: -5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -6983,7 +6983,7 @@ Transform:
   - {fileID: 2028551831}
   - {fileID: 1148266356}
   - {fileID: 910091401}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1821050504}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &550677735
 GameObject:
@@ -9801,7 +9801,7 @@ Transform:
   m_GameObject: {fileID: 910091400}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 4.1, z: 2.913}
+  m_LocalPosition: {x: 0, y: 3.53, z: 0.66}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -13097,14 +13097,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1371310380}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -3.15, y: 0, z: 2.94}
+  m_LocalRotation: {x: -0, y: 1, z: -0, w: 0}
+  m_LocalPosition: {x: -2.9511702, y: -2.42624, z: -2.06}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1196577678}
   - {fileID: 1424742214}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1821050504}
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
 --- !u!1 &1379999594
 GameObject:
@@ -15361,12 +15361,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1634884494}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.14, y: 2.766068, z: 1.98}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.94117, y: 0.339828, z: -3.02}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1821050504}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1648116066
 GameObject:
@@ -17715,6 +17715,41 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1818109292}
   m_Mesh: {fileID: 4300000, guid: eed7e310319bd46fe93f17de3399735e, type: 3}
+--- !u!1 &1821050503
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1821050504}
+  m_Layer: 0
+  m_Name: InhaleGameStage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1821050504
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1821050503}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.19883, y: 2.42624, z: 5}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1371310381}
+  - {fileID: 1634884496}
+  - {fileID: 541059494}
+  - {fileID: 1849257466}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1834832352
 GameObject:
   m_ObjectHideFlags: 0
@@ -18175,11 +18210,11 @@ Transform:
   m_GameObject: {fileID: 1849257464}
   serializedVersion: 2
   m_LocalRotation: {x: 0.4599342, y: -0.100624554, z: 0.3681497, w: 0.80174875}
-  m_LocalPosition: {x: -0.57, y: 3, z: 0}
+  m_LocalPosition: {x: -0.37116998, y: 0.57376003, z: -5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1821050504}
   m_LocalEulerAnglesHint: {x: 54.252003, y: 17.667002, z: 58.431004}
 --- !u!1001 &1849673873
 PrefabInstance:
@@ -28519,12 +28554,9 @@ SceneRoots:
   - {fileID: 1577806904}
   - {fileID: 1531466583}
   - {fileID: 161015900}
-  - {fileID: 1849257466}
   - {fileID: 607928930}
-  - {fileID: 1371310381}
-  - {fileID: 1634884496}
-  - {fileID: 541059494}
   - {fileID: 78783310}
   - {fileID: 704069640}
   - {fileID: 486230186}
   - {fileID: 1426047150}
+  - {fileID: 1821050504}
