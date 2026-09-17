@@ -4422,7 +4422,7 @@ MonoBehaviour:
   tiltRatio: 200
   airPerOffcandle: 300
   minimumEffectiveIntensity: 0
-  targetDose: 1
+  targetExhaledAirRatio: 1
   difficultyMultiplier: 1
 --- !u!1001 &489216202
 PrefabInstance:
@@ -8402,7 +8402,7 @@ MonoBehaviour:
   tiltRatio: 200
   airPerOffcandle: 300
   minimumEffectiveIntensity: 0
-  targetDose: 1
+  targetExhaledAirRatio: 1
   difficultyMultiplier: 1
 --- !u!4 &903076855 stripped
 Transform:
@@ -9523,7 +9523,7 @@ MonoBehaviour:
   tiltRatio: 200
   airPerOffcandle: 300
   minimumEffectiveIntensity: 0
-  targetDose: 1
+  targetExhaledAirRatio: 1
   difficultyMultiplier: 1
 --- !u!114 &1051652863
 MonoBehaviour:
@@ -10842,7 +10842,7 @@ MonoBehaviour:
   tiltRatio: 200
   airPerOffcandle: 300
   minimumEffectiveIntensity: 0
-  targetDose: 1
+  targetExhaledAirRatio: 1
   difficultyMultiplier: 1
 --- !u!1 &1197867716
 GameObject:
@@ -13275,7 +13275,7 @@ MonoBehaviour:
   tiltRatio: 200
   airPerOffcandle: 300
   minimumEffectiveIntensity: 0
-  targetDose: 1
+  targetExhaledAirRatio: 1
   difficultyMultiplier: 1
 --- !u!1 &1366044605
 GameObject:
