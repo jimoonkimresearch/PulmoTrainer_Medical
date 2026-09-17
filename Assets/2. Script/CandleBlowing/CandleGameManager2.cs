@@ -85,7 +85,11 @@ public class CandleGameManager2 : MonoBehaviour
         interactions = new CandleControl2[candleControl.Length];
         for (int i = 0; i < interactions.Length; i++)
             interactions[i] = candleControl[i] != null ? candleControl[i].GetComponent<CandleControl2>() : null;
-        if (candleView != null) candleView.SetStage(currStage);
+        if (candleView != null)
+        {
+            candleView.SetStage(currStage);
+            candleView.SetCandleCountVisible(false);
+        }
         gameManager = GameManager.instance;
         vrUiManager = VRUIManager.instance;
         loggingManager = GameObject.Find("LoggingManager");
@@ -124,6 +128,7 @@ public class CandleGameManager2 : MonoBehaviour
                     vrUiManager.HideExhaleHud();
                     if (!isGuiding)
                     {
+                        if (candleView != null) candleView.SetCandleCountVisible(false);
                         isGuiding = true;
                         vrUiManager.ShowCandleGuide(currStage);
                         rayCastCam.GetComponent<CamRayCast>().ResetFlag();
@@ -170,6 +175,7 @@ public class CandleGameManager2 : MonoBehaviour
                                 candleOffedOnThisStage = 0;
                                 guideTime = 0f;
                                 currState = GameState.SEEKINGCANDLE;
+                                if (candleView != null) candleView.SetCandleCountVisible(true);
                             }
                             else if (guideCount >= 0 && guideCount < 4)
                             {
@@ -185,6 +191,7 @@ public class CandleGameManager2 : MonoBehaviour
                             vrUiManager.HideCandleGuide();
                             candleOffedOnThisStage = 0;
                             currState = GameState.SEEKINGCANDLE;
+                            if (candleView != null) candleView.SetCandleCountVisible(true);
                         }
                     }
                     candleView.ResetUI();
@@ -437,6 +444,7 @@ public class CandleGameManager2 : MonoBehaviour
 
     private void resetStage(int stage)
     {
+        if (candleView != null) candleView.SetCandleCountVisible(false);
         vrUiManager.BlockEye();
         if (attemptTransition != null) StopCoroutine(attemptTransition);
         attemptTransition = null;

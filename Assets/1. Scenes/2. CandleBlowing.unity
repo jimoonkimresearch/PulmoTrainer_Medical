@@ -5441,7 +5441,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &618843226
 RectTransform:
   m_ObjectHideFlags: 0
@@ -15797,6 +15797,7 @@ MonoBehaviour:
   soundManager: {fileID: 947868712}
   showStarSource: {fileID: 199542446}
   offCandleTxt: {fileID: 759517445}
+  candleCountPanel: {fileID: 618843225}
   currStage: 1
   Stars:
   - {fileID: 1642225934}

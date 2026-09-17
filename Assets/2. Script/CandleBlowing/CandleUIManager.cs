@@ -17,6 +17,7 @@ public class CandleUIManager : MonoBehaviour
     public CandleSoundManager soundManager;
     public GameObject showStarSource = null;
     public Text offCandleTxt = null;
+    [SerializeField] private GameObject candleCountPanel;
 
     public int currStage = 1;
     public GameObject[] Stars = null;
@@ -32,6 +33,7 @@ public class CandleUIManager : MonoBehaviour
         {
             //Destroy(this.gameObject);
         }
+        SetCandleCountVisible(false);
         //showStarAnims = new Animation[10];
         
     }
@@ -48,6 +50,12 @@ public class CandleUIManager : MonoBehaviour
         offCandleTxt.text = offText;
             
         
+    }
+
+    public void SetCandleCountVisible(bool visible)
+    {
+        if (candleCountPanel != null && candleCountPanel.activeSelf != visible)
+            candleCountPanel.SetActive(visible);
     }
 
 
