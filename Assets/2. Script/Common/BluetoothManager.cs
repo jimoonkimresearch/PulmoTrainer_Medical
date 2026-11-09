@@ -91,6 +91,15 @@ public class BluetoothManager : MonoBehaviour
     public static BluetoothManager instance = null;
     private void Awake()
     {
+#if UNITY_EDITOR_WIN
+        // The editor simulator owns pressure input for this Play session. Skip initialization
+        // before subscribing to scene events; a disabled BLE coroutine must not overwrite it.
+        if (EditorSimulation.IsRunning)
+        {
+            enabled = false;
+            return;
+        }
+#endif
         if (instance != null && instance != this)
         {
             Destroy(gameObject);

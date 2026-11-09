@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class CandleGameManager2 : MonoBehaviour
+public class CandleGameManager2 : MonoBehaviour, PulmoTrainer.Inputs.IBreathPressureReceiver
 {
     public float outtakeTime = 0f;
     private float intakeTime = 0f;
@@ -12,6 +12,8 @@ public class CandleGameManager2 : MonoBehaviour
     {
         sensorData = value;
     }
+
+    void PulmoTrainer.Inputs.IBreathPressureReceiver.SetPressure(float pressure) => SetsensorData(pressure);
     private float prevSensorData = 0f;
     private CandleControl2[] interactions;
     private CandleControl2 activeCandle;

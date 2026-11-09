@@ -5,7 +5,7 @@ using PulmoTrainer.Calibration;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
 
-public class BreathTestGameManager : MonoBehaviour
+public class BreathTestGameManager : MonoBehaviour, PulmoTrainer.Inputs.IBreathPressureReceiver
 {
 
 
@@ -43,6 +43,8 @@ public class BreathTestGameManager : MonoBehaviour
     {
         sensorData = value;
     }
+
+    void PulmoTrainer.Inputs.IBreathPressureReceiver.SetPressure(float pressure) => SetsensorData(pressure);
 
     public float prevSensorData = 0;
 

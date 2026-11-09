@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class TutorialGameManager : MonoBehaviour
+public class TutorialGameManager : MonoBehaviour, PulmoTrainer.Inputs.IBreathPressureReceiver
 {
     public GameObject UImanager = null;
     public Transform playerTr = null;
@@ -15,6 +15,8 @@ public class TutorialGameManager : MonoBehaviour
     {
         sensorData = value;
     }
+
+    void PulmoTrainer.Inputs.IBreathPressureReceiver.SetPressure(float pressure) => SetsensorData(pressure);
 
     //public bool isInhaleGuiding = false;
     //public bool inhaleReady = false;
