@@ -1,35 +1,74 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
 public class FireControl : MonoBehaviour
 {
-    private Transform thisTr;
-    public GameObject offEffect = null;
-
-    // Start is called before the first frame update
-    void Start()
+    [SerializeField] private GameObject offEffect;
+    private Vector3 initialScale;
+    private Quaternion initialRotation;
+    private bool initialized;
+    private bool extinguishing;
+    public bool IsExtinguished { get; private set; }
+    private void Awake() { Initialize(); }
+    private void Initialize()
     {
-        thisTr = this.GetComponent<Transform>();
+        if (initialized) return;
+        initialScale = transform.localScale;
+        initialRotation = transform.localRotation;
+        initialized = true;
     }
-
     public void ShrinkAndOff()
     {
-        StartCoroutine("shrinkAndOff");
+        Initialize();
+        if (extinguishing || !gameObject.activeInHierarchy) return;
+        extinguishing = true;
+        StartCoroutine(Shrink());
+    }
+    private IEnumerator Shrink()
+    {
+        float duration = 0.15f;
+        Vector3 from = transform.localScale;
+        for (float elapsed = 0f; elapsed < duration && !IsExtinguished; elapsed += Time.deltaTime)
+        {
+            transform.localScale = Vector3.Lerp(from, Vector3.zero, elapsed / duration);
+            yield return null;
+        }
+        ExtinguishVisual();
+        yield return new WaitForSeconds(1f);
+        gameObject.SetActive(false);
     }
 
-    IEnumerator shrinkAndOff()
+    // At full group progress, finish any remaining shrink before the UI can display 100%.
+    // The existing smoke/audio and their lifetime continue in the coroutine.
+    public void FinishExtinguishing()
     {
-        while (true)
+        if (extinguishing) ExtinguishVisual();
+    }
+
+    private void ExtinguishVisual()
+    {
+        if (IsExtinguished) return;
+        IsExtinguished = true;
+        transform.localScale = Vector3.zero;
+        AudioSource source = GetComponentInParent<AudioSource>();
+        if (source != null) source.Play();
+        if (offEffect != null) offEffect.SetActive(true);
+    }
+    public void ResetFlame()
+    {
+        Initialize();
+        StopAllCoroutines();
+        CancelInvoke();
+        extinguishing = false;
+        IsExtinguished = false;
+        transform.localScale = initialScale;
+        transform.localRotation = initialRotation;
+        if (offEffect != null)
         {
-            if (thisTr.localScale.x <= 0.01)
-            {
-                GetComponentInParent<AudioSource>().Play();
-                offEffect.SetActive(true);
-                yield return new WaitForSeconds(1f);
-                this.gameObject.SetActive(false);
-            }
-            thisTr.localScale = thisTr.localScale * 0.9f;
+            foreach (ParticleSystem particles in offEffect.GetComponentsInChildren<ParticleSystem>(true))
+                particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            offEffect.SetActive(false);
         }
+        gameObject.SetActive(true);
     }
 }

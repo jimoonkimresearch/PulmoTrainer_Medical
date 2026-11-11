@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +17,7 @@ public class CandleUIManager : MonoBehaviour
     public CandleSoundManager soundManager;
     public GameObject showStarSource = null;
     public Text offCandleTxt = null;
+    [SerializeField] private GameObject candleCountPanel;
 
     public int currStage = 1;
     public GameObject[] Stars = null;
@@ -32,6 +33,7 @@ public class CandleUIManager : MonoBehaviour
         {
             //Destroy(this.gameObject);
         }
+        SetCandleCountVisible(false);
         //showStarAnims = new Animation[10];
         
     }
@@ -48,6 +50,12 @@ public class CandleUIManager : MonoBehaviour
         offCandleTxt.text = offText;
             
         
+    }
+
+    public void SetCandleCountVisible(bool visible)
+    {
+        if (candleCountPanel != null && candleCountPanel.activeSelf != visible)
+            candleCountPanel.SetActive(visible);
     }
 
 
@@ -67,12 +75,14 @@ public class CandleUIManager : MonoBehaviour
                 scoreText.text = ("촛불 " + (10 * currStage) + "개 중에 " + candleOffed + "개를 껐어요!"
                 + "\n다음엔 더 많이 끌수 있을까요?");
                 scoreTr.gameObject.SetActive(true);
-                soundManager.SendMessage("ScoreBoardSound");
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
+                soundManager.ScoreBoardSound();
             }
             else if (candleOffed >= (10 * currStage))
             {
                 scoreText.text = ("촛불을 모두 다 껐어요! 굉장해요!");
                 scoreTr.gameObject.SetActive(true);
+                if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
                 //올클리어 이펙트
                 perfectEffect.Play();
                 soundManager.OnPerfectGame();
@@ -84,7 +94,11 @@ public class CandleUIManager : MonoBehaviour
 
     public void ResetScoreUI()
     {
+        StopAllCoroutines();
+        CancelInvoke();
+        if (perfectEffect != null) perfectEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)
@@ -128,6 +142,8 @@ public class CandleUIManager : MonoBehaviour
 
     public void ResetUI()
     {
+        StopAllCoroutines();
+        CancelInvoke();
         for (int i = 0; i < currStage; i++)
         {
             Stars[i].SetActive(false);
@@ -181,4 +197,3 @@ public class CandleUIManager : MonoBehaviour
         showStarAnims[0] = obj.GetComponent<Animation>();
     }
 }
-

@@ -29,4 +29,18 @@ public class EffectContol : MonoBehaviour
     }
 
 
+    public void ResetEffects()
+    {
+        StopAllCoroutines();
+        CancelInvoke();
+        ResetEffect(boostEffect);
+        ResetEffect(startEffect);
+    }
+    private static void ResetEffect(GameObject effect)
+    {
+        if (effect == null) return;
+        foreach (ParticleSystem particles in effect.GetComponentsInChildren<ParticleSystem>(true))
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        effect.SetActive(false);
+    }
 }

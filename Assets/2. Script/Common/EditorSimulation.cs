@@ -1,21 +1,19 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using PulmoTrainer.Bluetooth;
+using PulmoTrainer.Inputs;
 
+[DisallowMultipleComponent]
 [DefaultExecutionOrder(-10000)]
-public class EditorSimulation : MonoBehaviour
+public sealed class EditorSimulation : MonoBehaviour
 {
-    [Header("Editor Simulation")]
-    [Tooltip("체크하면 Unity Editor의 Play Mode에서 키보드 입력을 사용하고 BluetoothManager를 자동으로 비활성화합니다.")]
+    [Header("Windows Editor Simulation")]
+    [Tooltip("Windows Editor의 Play Mode에서만 동작합니다. 다른 씬을 직접 실행해도 자동 생성되며 Android에서는 실행하지 않습니다.")]
     [SerializeField] private bool isSimulatingOnEditor = true;
 
-    [Tooltip("비워두면 활성화된 BluetoothManager를 자동으로 찾습니다. EditorSimulation과는 별도 GameObject에 두는 것을 권장합니다.")]
-    [SerializeField] private GameObject bluetoothManagerObject;
-
     [Header("Target")]
-    [Tooltip("SetsensorData(float)를 가진 현재 씬의 게임 매니저. 비워두면 알려진 씬/오브젝트 이름으로 자동 탐색합니다.")]
+    [Tooltip("비워두면 현재 씬의 활성 IBreathPressureReceiver를 연결합니다. 씬 전환 시 다시 연결합니다.")]
     [SerializeField] private GameObject targetGameManager;
 
     [Header("Keyboard Input")]
@@ -23,207 +21,211 @@ public class EditorSimulation : MonoBehaviour
     [SerializeField] private KeyCode inhaleKey = KeyCode.DownArrow;
 
     [Header("Pressure")]
-    [SerializeField] private float maxPressure = 5f;
-    [SerializeField] private float pressureChangeSpeed = 5f;
-    [SerializeField] private float pressureReturnSpeed = 8f;
-    [SerializeField] private float stateTriggerStep = 2.5f;
-
-    private float simulatedPressure;
+    [SerializeField, Min(0f)] private float maxPressure = 5f;
+    [SerializeField, Min(0f)] private float pressureChangeSpeed = 5f;
+    [SerializeField, Min(0f)] private float pressureReturnSpeed = 8f;
+    [SerializeField, Min(0f)] private float stateTriggerStep = 2.5f;
 
     private void Awake()
     {
-#if UNITY_EDITOR || UNITY_STANDALONE_WIN
-        if (!isSimulatingOnEditor)
-        {
-            // 시뮬레이션이 꺼져 있으면 BluetoothManager는 그대로 사용합니다.
-            enabled = false;
-            return;
-        }
-
-        DisableBluetoothManager();
+#if UNITY_EDITOR_WIN
+        ClaimSession();
 #else
-        // Editor 전용 시뮬레이션이 빌드에서 입력을 덮어쓰지 않도록 합니다.
+        // No bootstrap, keyboard input, scene callbacks, or BLE suppression in a player build.
         enabled = false;
 #endif
     }
 
+#if UNITY_EDITOR_WIN
+    private static EditorSimulation instance;
+    private IBreathPressureReceiver receiver;
+    private MonoBehaviour receiverOwner;
+    private float simulatedPressure;
+    private bool waitingForKeyRelease;
+
+    // Read-only signal used before BluetoothManager initializes its editor connection path.
+    public static bool IsRunning => instance != null && instance.enabled && instance.isSimulatingOnEditor;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetPlaySession()
+    {
+        // Also runs when Enter Play Mode has domain reload disabled.
+        if (instance != null) instance.UnsubscribeSceneEvents();
+        instance = null;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Bootstrap()
+    {
+        // Scene objects already exist here, but Awake has not run; include inactive objects
+        // in the lookup and inspect the serialized hierarchy flags to reuse the scene copy.
+        foreach (EditorSimulation simulation in FindObjectsByType<EditorSimulation>(
+            FindObjectsInactive.Include, FindObjectsSortMode.InstanceID))
+        {
+            if (!simulation.enabled || !simulation.gameObject.scene.IsValid() ||
+                !IsHierarchyEnabled(simulation.transform)) continue;
+            simulation.ClaimSession();
+            return;
+        }
+        new GameObject(nameof(EditorSimulation)).AddComponent<EditorSimulation>();
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void BindInitialScene()
+    {
+        // Explicit binding also covers Play Mode with scene reload disabled.
+        if (IsRunning) instance.BindScene(SceneManager.GetActiveScene());
+    }
+
+    private static bool IsHierarchyEnabled(Transform current)
+    {
+        while (current != null)
+        {
+            if (!current.gameObject.activeSelf) return false;
+            current = current.parent;
+        }
+        return true;
+    }
+
+    private void ClaimSession()
+    {
+        if (!isSimulatingOnEditor)
+        {
+            enabled = false;
+            return;
+        }
+        if (instance != null && instance != this)
+        {
+            enabled = false;
+            // A copied standalone simulator can be removed as a whole; preserve unrelated
+            // components/children if somebody attached the script to a shared object.
+            if (transform.childCount == 0 && GetComponents<Component>().Length == 2)
+                Destroy(gameObject);
+            else Destroy(this);
+            return;
+        }
+        instance = this;
+        if (transform.parent != null) transform.SetParent(null);
+        DontDestroyOnLoad(gameObject);
+        // Remove before adding so Awake/OnEnable and reload-disabled Play cannot double-subscribe.
+        UnsubscribeSceneEvents();
+        SceneManager.sceneLoaded += OnSceneLoaded;
+        SceneManager.activeSceneChanged += OnActiveSceneChanged;
+    }
+
     private void OnEnable()
     {
-        SceneManager.sceneLoaded += OnSceneLoaded;
-    }
-
-    private void Start()
-    {
-        ResolveTarget(SceneManager.GetActiveScene());
-        SendPressure(0f);
-        GameObject.Find("ArduinoState").GetComponent<Text>().text = "시뮬레이션 중";
-    }
-
-    private void Update()
-    {
-#if UNITY_EDITOR || UNITY_STANDALONE_WIN
-        bool exhalePressed = Input.GetKey(exhaleKey);
-        bool inhalePressed = Input.GetKey(inhaleKey);
-
-        float targetPressure = 0f;
-
-        if (exhalePressed && !inhalePressed)
-        {
-            targetPressure = maxPressure;
-        }
-        else if (inhalePressed && !exhalePressed)
-        {
-            targetPressure = -maxPressure;
-        }
-        else if (inhalePressed && exhalePressed)
-        {
-            Debug.Log("Simulation Input Error: Check input");
-        }
-
-        if (Input.GetKeyDown(inhaleKey) && !exhalePressed)
-        {
-            simulatedPressure = -Mathf.Min(stateTriggerStep, maxPressure);
-        }
-        else if (Input.GetKeyDown(exhaleKey) && !inhalePressed)
-        {
-            simulatedPressure = Mathf.Min(stateTriggerStep, maxPressure);
-        }
-
-        float changeSpeed = targetPressure == 0f
-            ? pressureReturnSpeed
-            : pressureChangeSpeed;
-
-        simulatedPressure = Mathf.MoveTowards(
-            simulatedPressure,
-            targetPressure,
-            changeSpeed * Time.deltaTime
-        );
-
-        SendPressure(simulatedPressure);
-#endif
+        ClaimSession();
+        if (instance == this) BindScene(SceneManager.GetActiveScene());
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-#if UNITY_EDITOR || UNITY_STANDALONE_WIN
-        DisableBluetoothManager();
-#endif
+        if (mode == LoadSceneMode.Single || scene == SceneManager.GetActiveScene()) BindScene(scene);
+    }
 
-        simulatedPressure = 0f;
-        targetGameManager = null;
-        ResolveTarget(scene);
+    private void OnActiveSceneChanged(Scene previous, Scene next) { BindScene(next); }
+
+    private void BindScene(Scene scene)
+    {
+        ResetPressure();
+        receiver = null;
+        receiverOwner = null;
+        if (!scene.IsValid() || !scene.isLoaded) return;
+
+        if (targetGameManager != null && targetGameManager.scene == scene)
+            foreach (MonoBehaviour behaviour in targetGameManager.GetComponents<MonoBehaviour>())
+                if (TryBindReceiver(behaviour)) break;
+
+        // Resolve only on scene events, never in Update. Login/menu scenes need no receiver.
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            if (receiver == null)
+                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (TryBindReceiver(behaviour)) break;
+
+            foreach (Text label in root.GetComponentsInChildren<Text>(true))
+            {
+                if (label.name != "ArduinoState") continue;
+                PulmoBluetoothStatusView view = label.GetComponent<PulmoBluetoothStatusView>();
+                if (view == null) view = label.gameObject.AddComponent<PulmoBluetoothStatusView>();
+                view.Initialize(label);
+                view.SetStatus("시뮬레이션 중");
+                // Visibility and layout remain owned by the existing UI code.
+            }
+        }
+        targetGameManager = receiverOwner != null ? receiverOwner.gameObject : null;
         SendPressure(0f);
     }
 
-    private void DisableBluetoothManager()
+    private bool TryBindReceiver(MonoBehaviour behaviour)
     {
-        if (bluetoothManagerObject == null)
-        {
-            BluetoothManager manager = FindObjectOfType<BluetoothManager>();
-
-            if (manager != null)
-            {
-                bluetoothManagerObject = manager.gameObject;
-            }
-        }
-
-        if (bluetoothManagerObject == null)
-        {
-            return;
-        }
-
-        // 같은 GameObject를 끄면 EditorSimulation도 함께 꺼지므로,
-        // 이 경우에는 BluetoothManager 컴포넌트만 비활성화합니다.
-        if (bluetoothManagerObject == gameObject)
-        {
-            BluetoothManager manager =
-                bluetoothManagerObject.GetComponent<BluetoothManager>();
-
-            if (manager != null)
-            {
-                manager.enabled = false;
-            }
-
-            Debug.LogWarning(
-                "EditorSimulation: BluetoothManager와 같은 GameObject에 있습니다. " +
-                "안정적인 초기화를 위해 두 컴포넌트를 서로 다른 GameObject에 두는 것을 권장합니다."
-            );
-            return;
-        }
-
-        if (bluetoothManagerObject.activeSelf)
-        {
-            bluetoothManagerObject.SetActive(false);
-            Debug.Log("EditorSimulation: BluetoothManager를 비활성화했습니다.");
-        }
+        if (behaviour == null || !behaviour.isActiveAndEnabled ||
+            !(behaviour is IBreathPressureReceiver target)) return false;
+        receiver = target;
+        receiverOwner = behaviour;
+        return true;
     }
 
-    private void ResolveTarget(Scene scene)
+    private void Update()
     {
-        // 인스펙터에서 직접 지정한 대상이 있으면 그것을 우선 사용합니다.
-        if (targetGameManager != null)
+        if (!isSimulatingOnEditor)
         {
+            ResetPressure();
+            return;
+        }
+        bool exhalePressed = PulmoInput.KeyHeld(exhaleKey);
+        bool inhalePressed = PulmoInput.KeyHeld(inhaleKey);
+        // A held key must not carry the previous scene's breath into the next scene.
+        if (waitingForKeyRelease)
+        {
+            waitingForKeyRelease = exhalePressed || inhalePressed;
+            SendPressure(0f);
             return;
         }
 
-        string managerName = null;
+        float limit = Mathf.Max(0f, maxPressure);
+        float targetPressure = exhalePressed == inhalePressed ? 0f : (exhalePressed ? limit : -limit);
+        if (PulmoInput.KeyPressed(inhaleKey) && !exhalePressed)
+            simulatedPressure = -Mathf.Min(Mathf.Max(0f, stateTriggerStep), limit);
+        else if (PulmoInput.KeyPressed(exhaleKey) && !inhalePressed)
+            simulatedPressure = Mathf.Min(Mathf.Max(0f, stateTriggerStep), limit);
 
-        switch (scene.name)
-        {
-            case "0. Tutorial":
-                managerName = "TutorialGameManager";
-                break;
-            case "0. BreathTest":
-                managerName = "BreathTestGameManager";
-                break;
-            case "1-1. RocketGame":
-            case "1-2. RocketStage2":
-            case "1-345. RocketStage345":
-                managerName = "RocketGameManager";
-                break;
-            case "2. CandleBlowing":
-                managerName = "CandleGameManager";
-                break;
-            case "3. Inhaler":
-                managerName = "InhaleGameManager";
-                break;
-        }
-
-        if (!string.IsNullOrEmpty(managerName))
-        {
-            targetGameManager = GameObject.Find(managerName);
-        }
-
-        if (targetGameManager == null)
-        {
-            Debug.LogWarning(
-                "EditorSimulation: SetsensorData(float)를 받을 게임 매니저를 찾지 못했습니다. " +
-                "Target Game Manager에 현재 씬의 매니저 오브젝트를 지정하세요."
-            );
-        }
+        float speed = targetPressure == 0f ? pressureReturnSpeed : pressureChangeSpeed;
+        simulatedPressure = Mathf.MoveTowards(simulatedPressure, targetPressure,
+            Mathf.Max(0f, speed) * Time.deltaTime);
+        SendPressure(simulatedPressure);
     }
 
     private void SendPressure(float pressure)
     {
-        if (targetGameManager == null)
-        {
-            return;
-        }
+        // Keep the Unity object alongside the interface to respect destroyed/disabled targets.
+        if (receiverOwner != null && receiverOwner.isActiveAndEnabled && receiver != null)
+            receiver.SetPressure(pressure);
+    }
 
-        targetGameManager.SendMessage(
-            "SetsensorData",
-            pressure,
-            SendMessageOptions.DontRequireReceiver
-        );
+    private void ResetPressure()
+    {
+        simulatedPressure = 0f;
+        waitingForKeyRelease = true;
+        SendPressure(0f);
+    }
+
+    private void OnApplicationFocus(bool focused) { ResetPressure(); }
+
+    private void UnsubscribeSceneEvents()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
     }
 
     private void OnDisable()
     {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-
-#if UNITY_EDITOR
-        simulatedPressure = 0f;
-        SendPressure(0f);
-#endif
+        UnsubscribeSceneEvents();
+        ResetPressure();
+        receiver = null;
+        receiverOwner = null;
+        if (instance == this) instance = null;
     }
+#endif
 }

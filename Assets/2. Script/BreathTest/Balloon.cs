@@ -43,10 +43,15 @@ public class Balloon : MonoBehaviour
     private float totalFVC;
     private float launchRatio;
     private float currentRiseSpeed;
+    private float pressureRatio;
+    private float sealedRiseSpeed;
+    private bool breathInputClosed;
     private bool initialized;
     private bool exhaleScaleCaptured;
     private bool isFlying;
     private bool isFinishing;
+    private BreathTestUIManager view;
+    public bool HasReachedFlightLimit => transform.localPosition.y >= maxAltitude;
 
     private void Awake()
     {
@@ -64,6 +69,7 @@ public class Balloon : MonoBehaviour
         thisTr = transform;
         thisRb = GetComponent<Rigidbody>();
         balloonSoundSource = GetComponent<AudioSource>();
+        view = UIManager != null ? UIManager.GetComponent<BreathTestUIManager>() : null;
         initialLocalPosition = thisTr.localPosition;
         initialLocalRotation = thisTr.localRotation;
         initialLocalScale = thisTr.localScale;
@@ -107,7 +113,7 @@ public class Balloon : MonoBehaviour
     {
         ResolveManagers();
         if (testGameManager != null && !isFinishing)
-            testGameManager.currState3 = BreathTestGameManager.TestGameState.INHALE;
+            testGameManager.SensorStart();
     }
 
     public void ReadyForLaunch()
@@ -119,7 +125,7 @@ public class Balloon : MonoBehaviour
     public void Intake(float sensorInput)
     {
         ResolveManagers();
-        if (isFinishing || gameManager == null || !IsFinite(sensorInput) ||
+        if (breathInputClosed || isFinishing || gameManager == null || !IsFinite(sensorInput) ||
             sensorInput > -gameManager.sensorActionPotential) return;
         totalInhale += sensorInput;
         if (IntakeInput != null) IntakeInput.text = totalInhale.ToString();
@@ -131,7 +137,7 @@ public class Balloon : MonoBehaviour
     public void Fev1Outtake(float sensorInput)
     {
         ResolveManagers();
-        if (isFinishing || gameManager == null || !IsFinite(sensorInput) ||
+        if (breathInputClosed || isFinishing || gameManager == null || !IsFinite(sensorInput) ||
             sensorInput < gameManager.sensorActionPotential) return;
         if (!exhaleScaleCaptured)
         {
@@ -150,7 +156,7 @@ public class Balloon : MonoBehaviour
 
     public void FvcOuttake(float sensorInput)
     {
-        if (isFinishing || !IsFinite(sensorInput) || sensorInput <= 0f) return;
+        if (breathInputClosed || isFinishing || !IsFinite(sensorInput) || sensorInput <= 0f) return;
         totalFVC += sensorInput;
         if (fvcInput != null) fvcInput.text = totalFVC.ToString();
         // Movement is performed only by FixedUpdate, never here.
@@ -166,23 +172,37 @@ public class Balloon : MonoBehaviour
         PlayEffect(boostEffect);
     }
 
-    private void FixedUpdate()
+    public void SetFlightPressure(float pressure)
     {
-        if (!isFlying || isFinishing || testGameManager == null || gameManager == null)
-            return;
-        if (testGameManager.currState3 != BreathTestGameManager.TestGameState.EXHALE)
-            return;
-
-        float pressure = testGameManager.sensorData;
-        float pressureRatio = IsFinite(pressure) && pressure > gameManager.sensorActionPotential
+        if (breathInputClosed || isFinishing || gameManager == null) return;
+        pressureRatio = IsFinite(pressure) && pressure > gameManager.sensorActionPotential
             ? DisplayRatio(pressure, gameManager.maxExhalePressure) : 0f;
+    }
+
+    public void SealBreathInput()
+    {
+        EnsureInitialized();
+        if (breathInputClosed || isFinishing) return;
+        // A short breath may end before the usual one-second launch point.
+        startLaunching();
+        sealedRiseSpeed = Mathf.Clamp(Mathf.Max(currentRiseSpeed, TargetRiseSpeed()),
+            0f, Mathf.Max(0f, maxRiseSpeed));
+        breathInputClosed = true;
+    }
+
+    private float TargetRiseSpeed()
+    {
         // Old BasicSpeed at 60 fps: speedOffset / 1000 * 60 = speedOffset * .06.
-        // Preserve that base-speed reference, replacing the excessive AddForce
-        // term with a bounded, normalized pressure-dependent speed.
-        float targetSpeed = Mathf.Clamp(
+        return Mathf.Clamp(
             launchRatio * Mathf.Max(0f, speedOffset) * 0.06f +
             pressureRatio * Mathf.Max(0f, pressureRiseSpeed),
             0f, Mathf.Max(0f, maxRiseSpeed));
+    }
+
+    private void FixedUpdate()
+    {
+        if (!isFlying || isFinishing) return;
+        float targetSpeed = breathInputClosed ? sealedRiseSpeed : TargetRiseSpeed();
         currentRiseSpeed = Mathf.MoveTowards(currentRiseSpeed, targetSpeed,
             Mathf.Max(0.01f, riseAcceleration) * Time.fixedDeltaTime);
         Vector3 localDelta = new Vector3(0f, currentRiseSpeed, Mathf.Max(0f, forwardSpeed))
@@ -192,24 +212,22 @@ public class Balloon : MonoBehaviour
         thisRb.MovePosition(thisRb.position + worldDelta);
     }
 
-    public void CheckExhaleEnd()
+    public void CompleteFlight()
     {
-        if (isFinishing || testGameManager == null) return;
-        if (thisTr.localPosition.y >= maxAltitude || testGameManager.outtakeTime >= 8f)
-        {
-            isFinishing = true;
-            isFlying = false;
-            currentRiseSpeed = 0f;
-            testGameManager.toFinishState();
-            StartCoroutine(FinishBalloon());
-        }
+        EnsureInitialized();
+        if (isFinishing) return;
+        isFinishing = true;
+        isFlying = false;
+        currentRiseSpeed = 0f;
+        if (isActiveAndEnabled) StartCoroutine(FinishBalloon());
+        else if (view != null) view.ScoreUI();
     }
 
     private IEnumerator FinishBalloon()
     {
         StopEffect(boostEffect);
         if (balloonSoundSource != null) balloonSoundSource.Stop();
-        if (UIManager != null) UIManager.SendMessage("ScoreUI", thisTr.position.y);
+        if (view != null) view.ScoreUI();
         PlayEffect(endEffect);
         yield return new WaitForSeconds(Mathf.Max(0f, finishEffectSeconds));
         StopEffect(endEffect);
@@ -223,8 +241,10 @@ public class Balloon : MonoBehaviour
         isFlying = false;
         isFinishing = false;
         exhaleScaleCaptured = false;
+        breathInputClosed = false;
         totalInhale = totalFEV1 = totalFVC = 0f;
         launchRatio = currentRiseSpeed = 0f;
+        pressureRatio = sealedRiseSpeed = 0f;
         StopEffect(boostEffect);
         StopEffect(endEffect);
         if (balloonSoundSource != null) balloonSoundSource.Stop();
@@ -246,7 +266,7 @@ public class Balloon : MonoBehaviour
     public void OnExhale(float pressure)
     {
         ResolveManagers();
-        if (gameManager == null || isFinishing) return;
+        if (gameManager == null || breathInputClosed || isFinishing) return;
         PlaySound(inflation);
         thisTr.localScale = initialLocalScale *
             (1f + DisplayRatio(pressure, gameManager.maxExhalePressure) * Mathf.Max(0f, deformationRatio));
@@ -255,7 +275,7 @@ public class Balloon : MonoBehaviour
     public void OnInhale(float pressure)
     {
         ResolveManagers();
-        if (gameManager == null || isFinishing) return;
+        if (gameManager == null || breathInputClosed || isFinishing) return;
         PlaySound(deflation);
         thisTr.localScale = initialLocalScale * Mathf.Max(0.05f,
             1f - DisplayRatio(pressure, gameManager.maxInhalePressure) * deformationRatio);

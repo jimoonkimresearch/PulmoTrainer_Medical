@@ -1,229 +1,289 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using ArduinoBluetoothAPI;
-
 
 public class RocketBehavior2 : MonoBehaviour
 {
-    private float ratio = 0f;
-    private float chargeRaito = 0f;
-    private float flyRatio = 0.01f;
-    private float chargeTime = 0f;
-    private float flyTime = 0f;
-    private float startFly = 0f;
-    private float effectTime = 0f;
-
-    private bool launchReady = false;
-    private bool launchStarted = false;
-
-    //찌그러지는 비율. fev1 최대 1000 시 y 절반, x, y 10프로 증가토록함.
-    private float deformY = 0.25f;
-    private float deformX = 0.05f;
-    private float deformZ = 0.05f;
-
-    private float y;
-    private float x;
-    private float z;
-    private int returnCount = 0;
-    private float outtake = 0f;
-
-
-
-    public GameObject EffectCtrl = null;
-    public GameObject Ceiling = null;
-    public Transform rocketTr = null;
-    public Rigidbody rocketRb = null;
-    public GameObject startEffect = null;
-    public GameObject endEffect = null;
-    public GameObject boostEffect = null;
-    public InputField IntakeInput = null;
-    public InputField fev1Input = null;
-    public InputField fvcInput = null;
-    public GameObject UIManager = null;
-    public RawImage rocketCam = null;
-    public Image intakeGuage = null;
-    public GameObject networkManager = null;
-    public RocketGameManager rocketGameManager = null;
-    public GameManager gameManager = null;
-    public RocketPlayerBehavior playerCtrl = null;
+    [SerializeField] private GameObject EffectCtrl = null;
+    [SerializeField] private GameObject Ceiling = null;
+    [SerializeField] private Transform rocketTr = null;
+    [SerializeField] private Rigidbody rocketRb = null;
+    [SerializeField] private GameObject startEffect = null;
+    [SerializeField] private GameObject endEffect = null;
+    [SerializeField] private GameObject boostEffect = null;
+    [SerializeField] private InputField IntakeInput = null;
+    [SerializeField] private InputField fev1Input = null;
+    [SerializeField] private InputField fvcInput = null;
+    [SerializeField] private GameObject UIManager = null;
+    [SerializeField] private RawImage rocketCam = null;
+    [SerializeField] private Image intakeGuage = null;
+    [SerializeField] private GameObject networkManager = null;
+    [SerializeField] private RocketGameManager rocketGameManager = null;
+    [SerializeField] private GameManager gameManager = null;
+    [SerializeField] private RocketPlayerBehavior playerCtrl = null;
     
 
+    [SerializeField, Min(0.1f)] private float maxRiseSpeed = 200f;
+    [Tooltip("Seconds to close 95% of an increase in target speed.")]
+    [SerializeField, Min(0.01f)] private float riseResponseSeconds = 0.315f;
+    [Tooltip("Seconds to close 95% of a decrease in target speed while blowing.")]
+    [SerializeField, Min(0.01f)] private float releaseResponseSeconds = 0.6f;
+    [Tooltip("Existing height-budget approach time while blowing; not a finish/settle hold.")]
+    [SerializeField, Min(0.01f)] private float arrivalResponseSeconds = 0.4f;
+    [SerializeField, Min(0f)] private float breathEndThreshold = 0.2f;
+    [Tooltip("Continuous neutral confirmation before locking this stage's single breath.")]
+    [SerializeField, Min(0.01f)] private float inputLockNeutralSeconds = 0.12f;
+    [Tooltip("Constant visual-only drift after reaching the score height, in world units per second.")]
+    [SerializeField, Min(0.01f)] private float postFinishRiseSpeed = 1f;
+    private const float ArrivalEpsilon = 0.001f;
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
+    private RocketDeformation deformation;
+    private bool initialized;
+    private bool launchStarted;
+    private bool inputLocked;
+    private bool neutralInput;
+    private bool finishStarted;
+    private float totalInhale;
+    private float totalExhale;
+    private float totalFev1;
+    private float exhaleSeconds;
+    private float neutralSeconds;
+    private float currentRiseSpeed;
+    private float targetHeight;
+    private float finalGoalHeight;
+    private float flightHeight;
+    private EffectContol effects;
+    private OnLaunch ceiling;
+    private RocketUIManager view;
+
+    public float Height => rocketTr != null ? rocketTr.position.y : transform.position.y;
+    public float PerformanceRatio => gameManager != null && gameManager.maxFvc > 0f
+        ? Mathf.Clamp01(totalExhale / gameManager.maxFvc) : 0f;
+    public static float MapHeight(float startHeight, float goalHeight, float performance)
+        => Mathf.Lerp(startHeight, goalHeight, Mathf.Clamp01(performance));
+
+    private void Awake() { EnsureInitialized(); }
     private void Start()
     {
-        if (rocketTr == null)
-            rocketTr = this.GetComponent<Transform>();
-        if (rocketRb == null)
-            rocketRb = this.GetComponent<Rigidbody>();
-
-        rocketGameManager = RocketGameManager.instance;
         gameManager = GameManager.instance;
-
-        IntakeInput.text = "0";
-        fev1Input.text = "0";
-        fvcInput.text = "0";
-
-        
+        rocketGameManager = RocketGameManager.instance;
+        if (rocketGameManager != null) ConfigureStage(500f + rocketGameManager.currStage * 100f);
     }
 
-    private void Update()
+    private void EnsureInitialized()
     {
-        //Debug.Log("rocket speed: " + rocketRb.velocity.magnitude);
+        if (initialized) return;
+        if (rocketTr == null) rocketTr = transform;
+        if (rocketRb == null) rocketRb = GetComponent<Rigidbody>();
+        initialPosition = rocketTr.position;
+        initialRotation = rocketTr.rotation;
+        deformation = new RocketDeformation(rocketTr);
+        effects = EffectCtrl != null ? EffectCtrl.GetComponent<EffectContol>() : null;
+        ceiling = Ceiling != null ? Ceiling.GetComponent<OnLaunch>() : null;
+        view = UIManager != null ? UIManager.GetComponent<RocketUIManager>() : null;
+        initialized = true;
+        ResetRocket();
     }
 
-
-    /// <summary>
-    /// 로켓 행동 컨트롤 위한 Flag 변환. 그 중에서 불기 중인데 속도가 1f 이하이면 끝내기 시퀀스 시작.
-    /// </summary>
-    /// <returns></returns>
-    IEnumerator toExhaleAndFinish()
+    public void ConfigureStage(float height)
     {
-        while(true)
-        {
-            if (rocketRb.linearVelocity.magnitude <= 1.05f || rocketTr.position.y >= 1500f)
-            {
-                rocketGameManager.SendMessage("toFinishState");
-                StartCoroutine(FinishRocket());
-                break;
-            }
-            yield return null;
-        }
-        StopCoroutine(toExhaleAndFinish());
+        EnsureInitialized();
+        targetHeight = Mathf.Max(initialPosition.y, height);
     }
 
-
-    /// <summary>
-    /// 통신으로 데이터 받아옴
-    /// </summary>
     public void InHaleStart()
     {
-        rocketGameManager.currState = RocketGameManager.RocketState.INHALE;
+        if (launchStarted || inputLocked || finishStarted) return;
+        if (rocketGameManager != null) rocketGameManager.currState = RocketGameManager.RocketState.INHALE;
+    }
+    public void ReadyForLaunch()
+    {
+        if (ceiling != null) ceiling.CeilingOpening();
+    }
+    public void Intake(float sensorInput)
+    {
+        if (gameManager == null || sensorInput >= 0f || launchStarted || inputLocked || finishStarted ||
+            float.IsNaN(sensorInput) || float.IsInfinity(sensorInput)) return;
+        totalInhale += sensorInput;
+        float ratio = gameManager.maxIntake < 0f ? Mathf.Clamp01(totalInhale / gameManager.maxIntake) : 0f;
+        deformation.ApplyInhale(ratio);
+        Vector3 anchoredPosition = rocketTr.position;
+        anchoredPosition.y = initialPosition.y + deformation.VerticalOffset;
+        if (rocketRb != null) rocketRb.position = anchoredPosition;
+        rocketTr.position = anchoredPosition;
+        SetText(IntakeInput, totalInhale);
+    }
+    public void startLaunching()
+    {
+        EnsureInitialized();
+        if (launchStarted || inputLocked || finishStarted) return;
+        launchStarted = true;
+        exhaleSeconds = 0f;
+        neutralSeconds = 0f;
+        if (effects != null) effects.Boost();
     }
 
-    /// <summary>
-    /// 게임매니저에서 게임 시작버튼 클릭 시 흡기 시작. 입력값 들어올 때 마다 로켓형태변화
-    /// </summary>
-    void Intake(float sensorInput)
+    public void ProcessExhale(float pressure, float deltaTime)
     {
-        if ((sensorInput <= gameManager.sensorActionPotential * -1f))   //흡기압력이 -1 이하일 때.
+        if (!launchStarted || inputLocked || finishStarted || float.IsNaN(pressure) || float.IsInfinity(pressure) ||
+            deltaTime <= 0f || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime)) return;
+        // Match BreathTest's frame accumulation; no legacy force/speed multipliers in calibration units.
+        float sample = Mathf.Max(0f, pressure);
+        totalExhale += sample;
+        exhaleSeconds += Mathf.Max(0f, deltaTime);
+        if (exhaleSeconds < 1f) totalFev1 += sample;
+        SetText(fev1Input, totalFev1);
+        SetText(fvcInput, totalExhale);
+        neutralInput = Mathf.Abs(pressure) <= Mathf.Max(0f, breathEndThreshold);
+        neutralSeconds = neutralInput ? neutralSeconds + deltaTime : 0f;
+        if (!neutralInput)
         {
-            //입력값과 기존값 더해 총흡기량 계산 및 UI에 표시
-            float intake = (sensorInput * gameManager.sensorToIntakeRatio) + float.Parse(IntakeInput.text);
+            float intensity = gameManager != null && gameManager.maxExhalePressure > 0f
+                ? Mathf.Clamp01(sample / gameManager.maxExhalePressure) : 0f;
+            float targetSpeed = Mathf.Max(0.1f, maxRiseSpeed) * intensity;
+            float response = targetSpeed > currentRiseSpeed ? riseResponseSeconds : releaseResponseSeconds;
+            float blend = 1f - Mathf.Exp(-Mathf.Log(20f) * deltaTime / Mathf.Max(0.01f, response));
+            currentRiseSpeed = Mathf.Lerp(currentRiseSpeed, targetSpeed, blend);
+        }
+        // One brief noise sample is tolerated; a confirmed end latches until ResetRocket.
+        if (PerformanceRatio >= 1f || neutralSeconds >= Mathf.Max(0.01f, inputLockNeutralSeconds))
+            LockBreathInput();
+    }
 
-            IntakeInput.text = intake.ToString();
+    private void LockBreathInput()
+    {
+        if (inputLocked) return;
+        inputLocked = true;
+        finalGoalHeight = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
+    }
 
-            //흡기 게이지 세팅
-            float ratio = intake / gameManager.maxIntake;
-            //Debug.Log(ratio);
+    private void FixedUpdate()
+    {
+        if (!launchStarted) return;
+        float deltaTime = Time.fixedDeltaTime;
+        Vector3 next = rocketRb != null ? rocketRb.position : rocketTr.position;
+        if (finishStarted)
+        {
+            currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
+            flightHeight += currentRiseSpeed * deltaTime;
+        }
+        else if (inputLocked)
+        {
+            AdvanceLockedFlight(deltaTime);
+        }
+        else
+        {
+            float goal = MapHeight(initialPosition.y, targetHeight, PerformanceRatio);
+            // Preserve the pre-existing active-breath budget limiter. Only the rise response is faster.
+            if (!neutralInput)
+            {
+                float remaining = Mathf.Max(0f, goal - flightHeight);
+                currentRiseSpeed = Mathf.Min(currentRiseSpeed,
+                    remaining / Mathf.Max(deltaTime, arrivalResponseSeconds));
+            }
+            flightHeight = Mathf.Min(goal, flightHeight + currentRiseSpeed * deltaTime);
+        }
+        deformation.RestoreDuringFlight(deltaTime);
+        next.y = flightHeight + deformation.VerticalOffset;
+        if (rocketRb != null) rocketRb.MovePosition(next);
+        else rocketTr.position = next;
+    }
 
-
-            //로켓형태변화
-            y = 0.5f - (ratio * deformY);
-            x = 0.5f + (ratio * deformX);
-            z = 0.5f + (ratio * deformZ);
-            rocketTr.localScale = new Vector3(x, y, z);
-
+    private void AdvanceLockedFlight(float deltaTime)
+    {
+        float remaining = Mathf.Max(0f, finalGoalHeight - flightHeight);
+        float travel = currentRiseSpeed * deltaTime;
+        if (travel < remaining)
+        {
+            flightHeight += travel;
+            return;
         }
 
-    }
-
-    void ReadyForLaunch()
-    {
-        Ceiling.SendMessage("CeilingOpening");
-    }
-
-
-    /// <summary>
-    /// 시간 카운팅은 통신에서 한 뒤 초기1초 동안 실행.
-    /// </summary>
-    /// <param name="sensorInput"></param>
-    void Fev1Outtake(float sensorInput)
-    {
-        outtake = sensorInput * gameManager.sensorToOuttakeRatio * gameManager.outtakeToSpeedRatio;
-        fev1Input.text = (float.Parse(fev1Input.text) + outtake).ToString();
-        fvcInput.text = fev1Input.text;
-        rocketRb.AddForce(Vector3.up * outtake * gameManager.accelerationRatio, ForceMode.Acceleration);
-    }
-
-    void FvcOuttake(float sensorInput)
-    {
-        outtake = sensorInput * gameManager.sensorToOuttakeRatio * gameManager.outtakeToSpeedRatio;
-        fvcInput.text = (float.Parse(fvcInput.text) + outtake).ToString();
-        rocketRb.AddForce(Vector3.up * outtake * gameManager.accelerationRatio, ForceMode.Acceleration);
-    }
-
-    /// <summary>
-    /// 발사효과 이후 실제 로켓 움직임. 천장에 열기 메시지, 이펙트 시작 메시지, 로켓모양복원. 종료시 종료코루틴 시작.
-    /// </summary>
-    /// <returns></returns>
-    void startLaunching()
-    {
-        EffectCtrl.SendMessage("Boost");
-        StartCoroutine(SetDeform());
-        Invoke("OnExhale", 2f);
-    }
-
-    void OnExhale()
-    {
-        StartCoroutine(toExhaleAndFinish());
-    }
-
-
-    /// <summary>
-    /// 찌그러진 로켓을 되돌림. 1/6초
-    /// </summary>
-    /// <returns></returns>
-    IEnumerator SetDeform()
-    {
-        float changeX = (rocketTr.localScale.x - 0.5f) / 10f;
-        float changeY = (0.5f - rocketTr.localScale.y) / 10f;
-        float changeZ = (rocketTr.localScale.z - 0.5f) / 10f;
-        int itter = 0;
-
-        while (itter<10)
+        // Split the crossing step: earned flight up to the score height, slow drift after it.
+        // Switching here prevents high-speed MovePosition steps queuing up while LateUpdate
+        // waits for the interpolated pose. Never overwrite the displayed Transform to finish.
+        if (remaining > 0f)
         {
-            y = rocketTr.localScale.y + changeY;
-            x = rocketTr.localScale.x - changeX;
-            z = rocketTr.localScale.z - changeZ;
-
-            rocketTr.localScale = new Vector3(x, y, z);
-            itter++;
-            yield return 1 / 60f;
+            deltaTime = Mathf.Max(0f, deltaTime - remaining / currentRiseSpeed);
+            flightHeight += remaining;
         }
-        StopCoroutine(SetDeform());
+        currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
+        flightHeight += currentRiseSpeed * deltaTime;
     }
 
-    IEnumerator FinishRocket()
+    private void LateUpdate()
     {
-       StopCoroutine(toExhaleAndFinish());
+        if (!inputLocked || finishStarted) return;
+        float physicalHeight = rocketRb != null ? rocketRb.position.y : Height;
+        // Wait for MovePosition to be visible, but do not brake to zero or require a settle hold.
+        if (flightHeight >= finalGoalHeight && physicalHeight >= finalGoalHeight - ArrivalEpsilon &&
+            Height >= finalGoalHeight - ArrivalEpsilon) FinishRocket();
+    }
 
-        playerCtrl.EndFollowing();
-        float height = rocketTr.position.y;
-        rocketRb.useGravity = false;
-        rocketRb.AddForce(Vector3.up * 100f, ForceMode.Acceleration);
-        endEffect.SetActive(true);
-        UIManager.SendMessage("ScoreUI", height);
-
-
-
-        while (endEffect != null)
-            yield return 0.1f;
-
-
-        //GameManager.instance.SendMessage("SaveGameData");
-
-        //rocketCam.gameObject.SetActive(false);
-        //this.gameObject.SetActive(false);
+    private void FinishRocket()
+    {
+        if (finishStarted) return;
+        finishStarted = true;
+        if (rocketRb != null) rocketRb.useGravity = false;
+        currentRiseSpeed = Mathf.Max(0.01f, postFinishRiseSpeed);
+        if (playerCtrl != null) playerCtrl.EndFollowing();
+        if (effects != null) effects.ResetEffects();
+        SetEffect(boostEffect, false);
+        SetEffect(startEffect, false);
+        SetEffect(endEffect, true);
+        // The score and player stop here; FixedUpdate keeps the rocket drifting upwards.
+        if (view != null) view.ScoreUI(finalGoalHeight);
+        if (rocketGameManager != null) rocketGameManager.toFinishState();
     }
 
     public void ResetRocket()
     {
-        rocketTr.position = new Vector3(1.11f, 1.46f, 2.2f);
-        rocketRb.useGravity = true;
-        x = 0.5f;
-        y = 0.5f;
-        z = 0.5f;
-        playerCtrl.StartFollowing();
+        if (!initialized) { EnsureInitialized(); return; }
+        StopAllCoroutines();
+        CancelInvoke();
+        if (rocketRb != null)
+        {
+            // Clear stored velocities before returning to controlled kinematic movement.
+            rocketRb.isKinematic = false;
+            rocketRb.linearVelocity = Vector3.zero;
+            rocketRb.angularVelocity = Vector3.zero;
+            rocketRb.useGravity = false;
+            rocketRb.isKinematic = true;
+            rocketRb.interpolation = RigidbodyInterpolation.Interpolate;
+            rocketRb.position = initialPosition;
+            rocketRb.rotation = initialRotation;
+        }
+        rocketTr.SetPositionAndRotation(initialPosition, initialRotation);
+        deformation.ResetScale();
+        totalInhale = totalExhale = totalFev1 = 0f;
+        exhaleSeconds = neutralSeconds = currentRiseSpeed = 0f;
+        flightHeight = initialPosition.y;
+        finalGoalHeight = initialPosition.y;
+        launchStarted = inputLocked = finishStarted = neutralInput = false;
+        SetText(IntakeInput, 0f);
+        SetText(fev1Input, 0f);
+        SetText(fvcInput, 0f);
+        if (effects != null) effects.ResetEffects();
+        SetEffect(startEffect, false);
+        SetEffect(boostEffect, false);
+        SetEffect(endEffect, false);
+        if (playerCtrl != null) playerCtrl.ResetFollowing();
+        gameObject.SetActive(true);
+    }
+
+    private static void SetText(InputField field, float value)
+    {
+        if (field != null) field.text = value.ToString();
+    }
+    private static void SetEffect(GameObject effect, bool visible)
+    {
+        if (effect == null) return;
+        if (visible) effect.SetActive(true);
+        foreach (ParticleSystem particles in effect.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (visible) particles.Play(true);
+        }
+        effect.SetActive(visible);
     }
 }

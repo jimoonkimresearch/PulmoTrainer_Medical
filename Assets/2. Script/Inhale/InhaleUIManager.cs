@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -27,25 +27,19 @@ public class InhaleUIManager : MonoBehaviour
 
     public void InhaleScoreUI()
     {
-        scoreTr.position = (playerTr.forward * 1f) + (playerTr.up * 3f);
-        //scoreTr.LookAt(playerTr.position);
-        //scoreTr.rotation = Quaternion.Euler(
-        //    new Vector3(scoreTr.rotation.eulerAngles.x
-        //    , scoreTr.rotation.eulerAngles.y + 180f
-        //    , scoreTr.rotation.eulerAngles.z));
-        //scoreTr.LookAt((playerTr.forward + (playerTr.up * 0.7f)) * 10f);
-        scoreTr.LookAt(playerTr.position);
-        scoreTr.Rotate(new Vector3(0f, 180f, 0f));
+        // Keep the wall-mounted pose authored in the Scene; only content and visibility change here.
         if (currStage != 5)
         {
             scoreText.text = ("음식" + InhaleGameManager.instance.currFoodeat
                 + "개를 먹었어요!\n 15개까지 더 먹어볼까요?");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
         }
         else
         {
             scoreText.text = ("음식 15개를 다 먹었어요!");
             scoreTr.gameObject.SetActive(true);
+            if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(true);
             perfectEffect.Play();
             soundManager.OnPerfectGame();
         }
@@ -56,6 +50,7 @@ public class InhaleUIManager : MonoBehaviour
     public void ResetScoreUI()
     {
         scoreTr.gameObject.SetActive(false);
+        if (VRUIManager.instance != null) VRUIManager.instance.SetScoreVisible(false);
     }
 
     public void SetStage(int stage)

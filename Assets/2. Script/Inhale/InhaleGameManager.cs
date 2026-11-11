@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
-public class InhaleGameManager : MonoBehaviour
+public class InhaleGameManager : MonoBehaviour, PulmoTrainer.Inputs.IBreathPressureReceiver
 {
     public GameObject UImanager = null;
     public Transform playerTr = null;
@@ -21,6 +21,8 @@ public class InhaleGameManager : MonoBehaviour
     {
         sensorData = value;
     }
+
+    void PulmoTrainer.Inputs.IBreathPressureReceiver.SetPressure(float pressure) => SetsensorData(pressure);
 
     public bool isGuiding = false;
     public bool inhaleReady = false;
@@ -176,7 +178,8 @@ public class InhaleGameManager : MonoBehaviour
                     if (sensorData <= gameManager.sensorActionPotential * -1f)
                     {
                         currState = GameState.INHALE;
-                        BluetoothManager.instance.checkingBLE = false;
+                        if (BluetoothManager.instance != null)
+                            BluetoothManager.instance.checkingBLE = false;
                     }
                     break;
                 case (GameState.INHALE):

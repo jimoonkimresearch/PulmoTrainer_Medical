@@ -41,7 +41,7 @@ public class CamRayCast : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+        if (PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked) return;
         line.SetPosition(0, tr.position);
         if (Physics.Raycast(tr.position, tr.forward, out hit, 100f))
         {
@@ -63,14 +63,17 @@ public class CamRayCast : MonoBehaviour
 
     public void StartSelection()
     {
+        if (PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked || hit.collider == null) return;
         StartCoroutine(SelectGame());
     }
 
     IEnumerator SelectGame()
     {
+        if (PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked || hit.collider == null) yield break;
         SelectBG.SetActive(true);
         prevHit = hit.collider.gameObject;
-        while (hit.collider.gameObject.layer == 9)
+        while (!PulmoTrainer.Training.TrainingEndSequence.IsInputBlocked &&
+            hit.collider != null && hit.collider.gameObject.layer == 9)
         {
             if (SelectImg.fillAmount >= 0.99)
             {
@@ -129,7 +132,7 @@ public class CamRayCast : MonoBehaviour
             SelectImg.fillAmount += 1 / (fps * SelectionTime);
             yield return Time.deltaTime;
         }
-        prevHit.SendMessage("OutLineOff");
+        if (prevHit != null) prevHit.SendMessage("OutLineOff");
         SelectBG.SetActive(false);
         SelectImg.fillAmount = 0f;
     }

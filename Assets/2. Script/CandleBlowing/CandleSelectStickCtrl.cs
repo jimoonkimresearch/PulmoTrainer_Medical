@@ -4,8 +4,7 @@ using PulmoTrainer.Gaze;
 public sealed class CandleSelectStickCtrl : PulmoGazeHandler
 {
     [SerializeField] private CandleGameManager2 gameManager;
-    private Outline highlighted;
-    private bool ownsSelection;
+    private CandleControl2 selectedInteraction;
 
     private CandleGameManager2 Manager
     {
@@ -16,42 +15,23 @@ public sealed class CandleSelectStickCtrl : PulmoGazeHandler
         }
     }
 
-    public override bool CanTrack
-    {
-        get
-        {
-            if (Manager == null) return false;
-            var state = Manager.currState;
-            return state == CandleGameManager2.GameState.SEEKINGCANDLE ||
-                state == CandleGameManager2.GameState.INHALEREADY ||
-                state == CandleGameManager2.GameState.INHALE ||
-                state == CandleGameManager2.GameState.EXHALE;
-        }
-    }
+    public override bool CanTrack => Manager != null && Manager.CanTrackCandleGaze;
 
     public override GameObject ResolveTarget(Collider hitCollider)
     {
-        if (hitCollider == null || Manager == null || Manager.candleControl == null) return null;
-        // Use the manager's ordered references instead of depending on Candles1..5 object names.
-        foreach (GameObject candle in Manager.candleControl)
-        {
-            if (candle != null && candle.activeInHierarchy &&
-                (hitCollider.gameObject == candle || hitCollider.transform.IsChildOf(candle.transform)))
-                return candle;
-        }
-        return null;
+        if (hitCollider == null || Manager == null) return null;
+        CandleControl2 interaction = hitCollider.GetComponentInParent<CandleControl2>();
+        // During a breath only the active set can resolve; looking elsewhere produces an exit.
+        return Manager.CanSelectCandle(interaction) ? interaction.gameObject : null;
     }
 
     public override void EnterTarget(GameObject target)
     {
         if (!CanTrack || target == null) return;
-        int index = System.Array.IndexOf(Manager.candleControl, target);
-        if (index < 0) return;
-        Manager.currCandleSeeing = index;
-        ownsSelection = true;
-        highlighted = target.GetComponent<Outline>();
-        if (highlighted != null) highlighted.enabled = true;
-        Manager.EyesOnCandle();
+        CandleControl2 interaction = target.GetComponent<CandleControl2>();
+        if (!Manager.TrySelectCandle(interaction)) return;
+        selectedInteraction = interaction;
+        interaction.SetHighlighted(true);
     }
 
     public override void StayOnTarget(GameObject target)
@@ -63,13 +43,11 @@ public sealed class CandleSelectStickCtrl : PulmoGazeHandler
 
     public override void ExitTarget(GameObject target)
     {
-        if (highlighted != null) highlighted.enabled = false;
-        highlighted = null;
-        if (!ownsSelection) return;
-        ownsSelection = false;
-        // Cleanup must not change FINISH/GUIDE back into a running game.
-        if (CanTrack && Manager.currState != CandleGameManager2.GameState.SEEKINGCANDLE)
-            Manager.EyesOffCandle();
+        CandleControl2 previous = selectedInteraction;
+        selectedInteraction = null;
+        if (previous == null) return;
+        previous.SetHighlighted(false);
+        if (Manager != null) Manager.NotifyCandleGazeLost(previous);
     }
 
     private void OnDisable() { ExitTarget(null); }

@@ -4421,6 +4421,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetExhaledAirRatio: 1
+  difficultyMultiplier: 1
 --- !u!1001 &489216202
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5438,7 +5441,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &618843226
 RectTransform:
   m_ObjectHideFlags: 0
@@ -8398,6 +8401,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetExhaledAirRatio: 1
+  difficultyMultiplier: 1
 --- !u!4 &903076855 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2790699077211534923, guid: aa73a9d31dfd049a1b51552625c41a7f,
@@ -9516,6 +9522,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetExhaledAirRatio: 1
+  difficultyMultiplier: 1
 --- !u!114 &1051652863
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10832,6 +10841,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetExhaledAirRatio: 1
+  difficultyMultiplier: 1
 --- !u!1 &1197867716
 GameObject:
   m_ObjectHideFlags: 0
@@ -11634,17 +11646,17 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1261301899}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -395, y: 262.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1983960254}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.01, y: 0.9}
-  m_AnchorMax: {x: 0.2, y: 0.99}
-  m_AnchoredPosition: {x: -0.000030517578, y: -0.00010681152}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0.105, y: 0.945}
+  m_AnchorMax: {x: 0.105, y: 0.945}
+  m_AnchoredPosition: {x: 0, y: 40}
+  m_SizeDelta: {x: 190, y: 45}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1261301901
 MonoBehaviour:
@@ -12747,7 +12759,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &1351736862
 Canvas:
   m_ObjectHideFlags: 0
@@ -13262,6 +13274,9 @@ MonoBehaviour:
   candlesForOff: 0
   tiltRatio: 200
   airPerOffcandle: 300
+  minimumEffectiveIntensity: 0
+  targetExhaledAirRatio: 1
+  difficultyMultiplier: 1
 --- !u!1 &1366044605
 GameObject:
   m_ObjectHideFlags: 0
@@ -15782,6 +15797,7 @@ MonoBehaviour:
   soundManager: {fileID: 947868712}
   showStarSource: {fileID: 199542446}
   offCandleTxt: {fileID: 759517445}
+  candleCountPanel: {fileID: 618843225}
   currStage: 1
   Stars:
   - {fileID: 1642225934}
@@ -17446,7 +17462,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: e568aea00b992224b934d7555c41ec04, type: 3}
+  m_Resource: {fileID: 8300000, guid: 8ac19c67024d343a2bd3d6f5f1eefb32, type: 3}
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1

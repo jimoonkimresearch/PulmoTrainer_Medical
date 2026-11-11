@@ -2007,17 +2007,17 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 204637594}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 463735700}
+  m_Father: {fileID: 371083664}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.01, y: 0.9}
-  m_AnchorMax: {x: 0.2, y: 0.99}
-  m_AnchoredPosition: {x: -355.5, y: 177.99992}
-  m_SizeDelta: {x: 171, y: 36}
+  m_AnchorMin: {x: 0.105, y: 0.945}
+  m_AnchorMax: {x: 0.105, y: 0.945}
+  m_AnchoredPosition: {x: -385, y: 216}
+  m_SizeDelta: {x: 190, y: 45}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &204637596
 MonoBehaviour:
@@ -2747,6 +2747,7 @@ RectTransform:
   - {fileID: 855200778}
   - {fileID: 833788223}
   - {fileID: 866063506}
+  - {fileID: 204637595}
   m_Father: {fileID: 1760174569}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -3890,7 +3891,6 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 937327338}
-  - {fileID: 204637595}
   - {fileID: 173841268}
   - {fileID: 1004345939}
   - {fileID: 2112411458}
@@ -3935,6 +3935,7 @@ MonoBehaviour:
   timeOut: 110
   sensorText: {fileID: 933641301}
   vrSensorText: {fileID: 951826491}
+  reconnectDelaySeconds: 3
   checkingBLE: 1
   logging: {fileID: 1606492995}
   currGameManager: {fileID: 702132407}
@@ -5268,6 +5269,7 @@ GameObject:
   m_Component:
   - component: {fileID: 738313536}
   - component: {fileID: 738313535}
+  - component: {fileID: 738313537}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -5287,11 +5289,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c64ad893d8814de2a97f4e42944f512, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxIntake: -6000
-  maxFev1: 1000
-  maxFvc: 1100
-  maxInhalePressure: -300
-  maxExhalePressure: 200
+  calibratedInhaleCapacity: -6000
+  calibratedFev1: 1000
+  calibratedExhaleCapacity: 1100
+  calibratedInhalePressure: -300
+  calibratedExhalePressure: 200
   accelerationRatio: 12
   sensorToIntakeRatio: 1
   sensorToOuttakeRatio: 3
@@ -5315,6 +5317,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &738313537
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 738313534}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16651d0d9b9d487ea1679af8d3c2f34f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: CommonAD::PulmoTrainer.Training.TrainingEndSequence
+  narrationSource: {fileID: 0}
+  endingNarration: {fileID: 0}
+  postNarrationDelay: 0.5
 --- !u!1 &739760963
 GameObject:
   m_ObjectHideFlags: 0
@@ -8342,6 +8359,13 @@ MonoBehaviour:
   rocketGameManager: {fileID: 0}
   gameManager: {fileID: 0}
   playerCtrl: {fileID: 124406241}
+  maxRiseSpeed: 200
+  riseResponseSeconds: 0.315
+  releaseResponseSeconds: 0.6
+  arrivalResponseSeconds: 0.4
+  breathEndThreshold: 0.2
+  inputLockNeutralSeconds: 0.12
+  postFinishRiseSpeed: 1
 --- !u!114 &1108781264
 MonoBehaviour:
   m_ObjectHideFlags: 0
